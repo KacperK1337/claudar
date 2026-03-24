@@ -15,6 +15,10 @@ cd claudar
 The script will check if required tools for selected skill are installed, 
 then it will copy the skill to `~/.claude/skills/` so it's available globally.
 
+## Upgrading
+Skill installation already covers upgrading — 
+if you run the installation script for a skill that is already installed, it will be updated with new changes.
+
 ## Uninstalling
 Remove the skill directory from `~/.claude/skills/`:
 ```bash

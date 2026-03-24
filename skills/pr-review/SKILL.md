@@ -29,11 +29,7 @@ If no PR is found, inform the user and stop.
 
 Extract and note: PR number, title, author, source branch (`headRefName`), target branch (`baseRefName`), and the PR description.
 
-## Step 2: Fetch latest state and get the diff
-
-```bash
-git fetch origin <baseRefName> <headRefName>
-```
+## Step 2: Get the diff
 
 Get the full diff:
 ```bash
