@@ -22,7 +22,7 @@ rm -rf ~/.claude/skills/<skill-name>
 ```
 
 ## Contributing
-To add Create a directory under `skills/` with:
-
-- `SKILL.md` — the skill definition (see [Claude Code docs](https://docs.anthropic.com/en/docs/claude-code) for format)
-- `requirements.txt` — one CLI tool per line that must be available for the skill to work
+To add a skill create a directory with the name for it under [skills](skills) with:
+- `SKILL.md` — the skill definition (see [Claude Code docs](https://docs.anthropic.com/en/docs/claude-code) for correct format)
+- `requirements.txt` — one CLI tool per line that must be available for the skill to work (leave empty if there are none)
+- `README.md` — description of the skill, its requirements, usage, examples, what it does (see existing skills for examples)
