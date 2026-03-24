@@ -121,7 +121,7 @@ Specific observations about whether the PR follows established patterns in the c
 **Reuse & DRY**
 - Is there existing code that does the same thing?
 - Are there utilities being reinvented?
-- Could shared logic be extracted?
+- Could share logic be extracted?
 
 **Testing**
 - Are changes covered by tests?
