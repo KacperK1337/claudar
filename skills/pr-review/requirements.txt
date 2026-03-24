@@ -1,0 +1,3 @@
+claude
+gh
+git
