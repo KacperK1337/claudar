@@ -1,6 +1,10 @@
 # pr-review
 Deep, in-depth code review of a GitHub Pull Request.
 
+## Requirements
+- `git` installed and authenticated
+- `gh` installed and authenticated
+
 ## Installation
 ```
 ./install.sh pr-review

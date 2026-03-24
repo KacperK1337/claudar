@@ -2,7 +2,7 @@
 A collection of Claude Code skills ready to install and use.
 
 Current available skills can be checked in [skills](skills) directory.
-For each there is an README.md with details on what it does and which tools it requires.
+For each there is a README.md with details on what it does and which tools it requires (claude is required by default and not listed).
 
 ## Installation
 Clone the repo and run the `install.sh` script with the skill you want to install:
