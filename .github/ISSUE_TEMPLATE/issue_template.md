@@ -1,3 +1,8 @@
+---
+name: Issue
+about: Report a bug, safety concern, or request a feature
+---
+
 ## Type <!-- Pick one -->
 - [ ] Bug
 - [ ] Safety concern
