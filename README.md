@@ -32,3 +32,5 @@ To add a skill create a directory with the name for it under [skills](skills) wi
 - `README.md` — description of the skill, its requirements, usage, examples, what it does (see existing skills for examples)
 
 Remember to verify your skill before submitting any changes.
+
+If u see anything not working properly or areas to improve feel free to open an issue.
