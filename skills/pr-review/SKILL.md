@@ -11,13 +11,18 @@ Your job is to protect its quality, consistency, and maintainability.
 
 The user provided: `$ARGUMENTS`
 
-Determine whether this is a PR number or a branch name:
+Determine the input type:
+- If the argument is `HEAD` (case-insensitive), resolve the current branch name using `git rev-parse --abbrev-ref HEAD`, then find the PR for that branch.
 - If it looks like a number (digits only), treat it as a PR number.
 - Otherwise, treat it as a source branch name and find the associated PR.
 
 Run these commands to gather PR metadata:
 
 ```
+# If HEAD:
+BRANCH=$(git rev-parse --abbrev-ref HEAD)
+gh pr list --head "$BRANCH" --json number,title,body,author,baseRefName,headRefName,files,additions,deletions,changedFiles,url --limit 1
+
 # If PR number:
 gh pr view $ARGUMENTS --json number,title,body,author,baseRefName,headRefName,files,additions,deletions,changedFiles,url
 
@@ -25,7 +30,9 @@ gh pr view $ARGUMENTS --json number,title,body,author,baseRefName,headRefName,fi
 gh pr list --head "$ARGUMENTS" --json number,title,body,author,baseRefName,headRefName,files,additions,deletions,changedFiles,url --limit 1
 ```
 
-If no PR is found, inform the user and stop.
+If no PR is found:
+- If the input was `HEAD`, report an error: "No open PR found for the current branch `<branch-name>`. Make sure a PR exists for this branch before using HEAD."
+- Otherwise, inform the user and stop.
 
 Extract and note: PR number, title, author, source branch (`headRefName`), target branch (`baseRefName`), and the PR description.
 
