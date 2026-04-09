@@ -18,7 +18,6 @@ After debugging an issue in Claude Code, run:
 ## What it does
 1. Analyzes the full conversation history to extract the bug context
 2. Identifies the problem, root cause, affected area, reproduction steps, and any fix applied
-3. Suggests a priority level (Critical / Major / Minor / Trivial)
-4. Outputs a structured bug ticket ready to paste into Jira
+3. Outputs a structured bug ticket ready to paste into Jira
 
-The output covers: summary, steps to reproduce, expected vs actual behavior, root cause, affected components, and fix details — all based strictly on what was discussed in the conversation.
+The output covers: summary, root cause, steps to reproduce, expected behavior, and acceptance criteria — all based strictly on what was discussed in the conversation.
