@@ -15,19 +15,10 @@ Review the entire conversation history and extract:
 3. **Affected area** — which files, modules, services, or features are involved.
 4. **Steps to reproduce** — how the user encountered or triggered the bug, based on what they described.
 5. **Solution applied** — what fix was discussed or implemented (if any).
-6. **Severity signal** — how impactful the bug seems (crash, data loss, UX annoyance, edge case, etc.).
 
 If any of these are unclear or not present in the conversation, note them as "Unknown" or "N/A" — do not fabricate details.
 
-## Step 2: Determine priority suggestion
-
-Based on the severity signal, suggest one of:
-- **Critical** — system down, data loss, security vulnerability, no workaround
-- **Major** — core functionality broken, significant user impact, workaround exists but is painful
-- **Minor** — non-core functionality affected, reasonable workaround available
-- **Trivial** — cosmetic, typo, minor inconvenience
-
-## Step 3: Produce the ticket
+## Step 2: Produce the ticket
 
 Output the ticket in the following format. Use plain text suitable for pasting directly into Jira.
 
@@ -49,8 +40,8 @@ Output the ticket in the following format. Use plain text suitable for pasting d
 ### Expected Behavior
 <what should happen>
 
-### Actual Behavior
-<what actually happens — include error messages if discussed>
+### Acceptance Criteria
+<bulleted list of conditions that must be true when the bug is resolved>
 ```
 
 ---
