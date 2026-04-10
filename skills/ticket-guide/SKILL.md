@@ -39,7 +39,12 @@ curl -s "${JIRA_URL}/rest/api/2/issue/$ARGUMENTS?fields=summary,description,issu
   -H "Accept: application/json"
 ```
 
-If authentication is required and fails, inform the user they need to set up credentials (e.g. `JIRA_API_TOKEN` and `JIRA_EMAIL` env vars) and stop.
+If authentication is required and fails, inform the user they need to set up credentials (`JIRA_API_TOKEN` and `JIRA_EMAIL` env vars):
+```bash
+export JIRA_API_TOKEN=<your_token>
+export JIRA_EMAIL=<your_email>
+```
+and then stop. When these env vars are available, use them to construct an authenticated request (Basic auth with email and API token).
 
 Extract and note: ticket number, title, description, acceptance criteria (if any), issue type, and priority.
 
