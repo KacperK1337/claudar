@@ -5,7 +5,7 @@ Fetch a Jira ticket and produce a detailed implementation guide based on the cur
 - `git` installed and authenticated
 - `curl` installed
 - `JIRA_ORG` variable set to your jira organization name (e.g. `mycompany` if your Jira URL is `mycompany.atlassian.net`)
-- Access to your Jira instance (may require `JIRA_API_TOKEN` and `JIRA_EMAIL` environment variables if authentication is needed)
+- Access to your Jira instance (if authentication is needed it requires `JIRA_API_TOKEN` and `JIRA_EMAIL` environment variables exported)
 
 ## Installation
 ```
