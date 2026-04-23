@@ -1,10 +1,26 @@
 ---
 name: jira-bug
-description: Generate a Jira bug ticket title and description from the current conversation
+description: generate a jira bug ticket title and description from the current conversation.
 disable-model-invocation: true
 ---
 
 You are a senior engineer writing a clear, actionable Jira bug ticket based on the conversation so far.
+
+## Input handling
+
+The raw user input is available as:
+
+`$ARGUMENTS`
+
+This skill does not require a primary argument.
+
+Interpret `$ARGUMENTS` as optional additional context only:
+
+- Additional context may contain spaces, bullets, punctuation, and multiple lines.
+- Treat additional context as important user intent that should shape the ticket: emphasis, audience, wording, strictness of acceptance criteria, focus on reproduction steps, focus on user-visible impact, or explicit instructions about what to highlight or de-emphasize.
+- If the additional context conflicts with the conversation evidence, call out the conflict implicitly by following the conversation facts and not inventing unsupported details.
+
+Before producing the ticket, briefly summarize any additional context provided. If none was provided, say that none was supplied.
 
 ## Step 1: Analyze the conversation
 
@@ -18,11 +34,13 @@ Review the entire conversation history and extract:
 
 If any of these are unclear or not present in the conversation, note them as "Unknown" or "N/A" — do not fabricate details.
 
+Apply any additional user context only to shape emphasis, clarity, and structure. Do not let it override the factual record of the conversation.
+
 ## Step 2: Produce the ticket
 
 Output the ticket in the following format. Use plain text suitable for pasting directly into Jira.
 
-```
+```text
 ## Title
 <concise, specific title — what's broken and where, max ~80 chars>
 
@@ -53,3 +71,4 @@ Output the ticket in the following format. Use plain text suitable for pasting d
 - Write for someone who was NOT in this conversation. They should understand the bug without additional context.
 - If the conversation didn't cover reproduction steps clearly, write what you can infer and mark gaps with "[needs verification]".
 - Do not include internal conversation details, back-and-forth discussion, or meta-commentary. Just the clean ticket.
+- Use any additional context only to improve the usefulness of the ticket, not to add unsupported facts.
