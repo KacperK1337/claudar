@@ -71,6 +71,8 @@ Parse the `.ics` file to extract today's events. Look for `VEVENT` blocks where 
 Only include events with specific times (skip all-day events where DTSTART is a DATE, not DATETIME). Convert all times to local timezone `HH:MM` format.
 Parse each meeting into a list of `{name, startTime, endTime}` objects.
 
+**Filter out non-work events:** Skip any calendar event that looks like a personal or non-work activity. This includes (but is not limited to): lunch, breakfast, dinner, gym, doctor, dentist, break, pick up, drop off, personal, errand, etc. Match case-insensitively against the event summary/name. When in doubt, skip it — only include events that are clearly work meetings.
+
 ## Step 4: Resolve Jira issue IDs
 
 The Tempo API requires numeric `issueId`, not the ticket key string. For every unique ticket key (the meeting ticket + all user-provided tickets), resolve it:
@@ -130,17 +132,14 @@ Convert each duration to minutes. Validate:
 
 Build the day's schedule starting at **09:00** (9 AM).
 
-1. Collect all occupied windows (meetings from Step 4).
-2. For each user work entry in order:
+1. Collect all occupied windows (meetings from Step 5).
+2. For each user work entry **in order**:
    - Find the next available time slot starting from the current pointer (initially 09:00).
    - If the current pointer falls inside an occupied window, jump the pointer to the end of that window.
-   - If placing the entry would overlap with an upcoming occupied window, split the available time:
-     - Place as much as fits before the meeting.
-     - After the meeting ends, continue placing the remaining duration.
-   - Record the entry with its actual start time and duration.
+   - If placing the full entry would overlap with an upcoming occupied window, **do NOT split the entry**. Instead, jump the pointer past that meeting and place the entry as a single continuous block after it. Keep checking — if the new position also overlaps with another meeting, keep jumping until you find a gap large enough to fit the entire entry.
+   - Each user entry MUST be logged as exactly ONE Tempo record. Never split a user entry into multiple records.
 3. Work entries must not overlap with each other or with meetings.
-
-For conflict resolution: if a work entry's duration would cause it to overlap a meeting, the entry should be placed BEFORE the meeting starts (shifting its start time earlier if needed, as early as 08:00) or split around the meeting. Never overlap.
+4. It is OK to have gaps/breaks between records. Records do not need to be back-to-back.
 
 ## Step 8: Log work entries to Tempo
 
@@ -194,9 +193,12 @@ Print a table of ALL records for the day:
 ## Rules
 
 - Every record MUST be at least 30 minutes. No exceptions.
+- Every user-provided entry MUST be logged as exactly ONE record. Never split entries into sub-records.
 - The day MUST total exactly 8 hours (480 minutes). Warn the user if it doesn't.
 - Meetings are ALWAYS logged first under `${TEMPO_MEETING_TICKET}`. They take priority over user entries.
+- Skip non-work calendar events (lunch, breakfast, gym, personal errands, etc.) — do not log them to Tempo.
 - Never double-book a time slot. Meetings are immovable; user entries flex around them.
+- Gaps between records are fine. Records do not need to be perfectly contiguous.
 - If an API call fails, show the error response body and stop. Do not silently skip entries.
 - All times are in the user's local timezone.
 - Do not fabricate calendar events. Only use what the API returns.
