@@ -128,7 +128,24 @@ Parsing strategy: the first token is always the ticket key (matches `[A-Z]+-\d+`
 Convert each duration to minutes. Validate:
 - Each entry is at least 30 minutes. If less, reject it and inform the user.
 
-## Step 7: Schedule work entries around meetings
+## Step 7: Auto-adjust durations to fill 8 hours
+
+This step ensures the day always totals exactly 8 hours (480 minutes). Calculate:
+- `meeting_total` = sum of all meeting durations from Step 5
+- `work_total` = sum of all user-provided entry durations from Step 6
+- `grand_total` = meeting_total + work_total
+- `difference` = 480 - grand_total
+
+If `difference == 0`: no adjustment needed, proceed.
+
+If `difference != 0` (under or over 8 hours): adjust the user-provided entry durations to compensate. Use your best judgment to decide which entries to grow or shrink — consider the context, descriptions, and relative sizes. You might add time to one entry or spread it across several, whatever makes the most sense for that particular day.
+- Never shrink any entry below 30 minutes.
+- Never adjust meeting durations — only user-provided work entries.
+- Print what you adjusted, e.g.: `🔧 Adjusted AB-1234 "code changes" from 4h 0m → 4h 30m to fill 8h day.`
+
+This adjustment MUST happen before scheduling (Step 8) so the time windows are calculated correctly.
+
+## Step 8: Schedule work entries around meetings
 
 Build the day's schedule starting at **09:00** (9 AM).
 
@@ -141,7 +158,7 @@ Build the day's schedule starting at **09:00** (9 AM).
 3. Work entries must not overlap with each other or with meetings.
 4. It is OK to have gaps/breaks between records. Records do not need to be back-to-back.
 
-## Step 8: Log work entries to Tempo
+## Step 9: Log work entries to Tempo
 
 For each scheduled work entry, create a Tempo worklog:
 ```bash
@@ -163,7 +180,7 @@ Print each logged entry as confirmation:
 ✅ <HH:MM>-<HH:MM> | <TICKET> | <duration> | <description>
 ```
 
-## Step 9: Validate the 8-hour day
+## Step 10: Validate the 8-hour day
 
 Sum all logged time (meetings + work entries) in minutes.
 
@@ -171,7 +188,7 @@ Sum all logged time (meetings + work entries) in minutes.
 - If total < 480: calculate the gap and print `⚠️ Day incomplete — missing <X>h <Y>m. Add more entries to fill the day.`
 - If total > 480: print `⚠️ Day exceeds 8h — total is <X>h <Y>m. Review entries.`
 
-## Step 10: Print final summary
+## Step 11: Print final summary
 
 Print a table of ALL records for the day:
 

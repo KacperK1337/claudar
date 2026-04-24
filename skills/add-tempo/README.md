@@ -59,8 +59,12 @@ Description after the duration is optional. If omitted, defaults to "Work on AB-
 Same ticket can appear multiple times — each entry is logged as a separate record.
 
 ## What it does
-1. Fetches today's calendar meetings and logs them to Tempo under specified meeting ticket
-2. Parses your comma-separated ticket + duration entries
-3. Schedules work entries starting around 9 AM, automatically skipping around meetings
-4. Logs everything to Tempo via the API
-5. Validates the day totals 8 hours and warns you if it doesn't
+1. Fetches today's Outlook calendar meetings (skips non-work events like breakfast, lunch, etc.)
+2. Logs work meetings to Tempo under the configured `TEMPO_MEETING_TICKET`
+3. Parses your comma-separated ticket + duration + optional description entries
+4. **Auto-adjusts** durations so the day totals exactly 8 hours — if you're over or under, it intelligently adjusts entry durations to fit
+5. Schedules work entries starting at 9 AM, jumping over meetings (never splits an entry — each one stays as a single block)
+6. Resolves Jira issue IDs and logs everything to Tempo via the API
+7. Prints a final summary table of all records for the day
+
+Note: Your Jira account ID (needed by Tempo) is fetched automatically — no need to export it.
