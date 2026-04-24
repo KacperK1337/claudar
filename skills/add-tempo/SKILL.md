@@ -17,7 +17,7 @@ The following environment variables MUST be set. If any are missing, stop immedi
 | `JIRA_EMAIL` | Jira account email address |
 | `JIRA_API_TOKEN` | Jira/Atlassian API token (generate at https://id.atlassian.com/manage-profile/security/api-tokens) |
 | `TEMPO_WORKER_ID` | Your Jira account ID (find via Jira profile or `GET /rest/api/3/myself`) |
-| `TEMPO_MEETING_TICKET` | Jira ticket key to log meeting time under, e.g. `RF-4518` |
+| `TEMPO_MEETING_TICKET` | Jira ticket key to log meeting time under, e.g. `AB-1234` |
 | `GCAL_ACCESS_TOKEN` | Google Calendar OAuth2 access token (or use `OUTLOOK_ACCESS_TOKEN` for Microsoft) |
 
 If using **Microsoft/Outlook** calendar instead of Google, set `OUTLOOK_ACCESS_TOKEN` instead of `GCAL_ACCESS_TOKEN`.
@@ -164,10 +164,10 @@ Print a table of ALL records for the day:
 📋 Tempo Log for <DATE>
 ─────────────────────────────────────────────
   Time        │ Ticket   │ Duration │ Description
-  09:00-10:00 │ RF-1234  │ 1h 0m    │ Work on RF-1234
-  10:00-10:30 │ RF-9999  │ 0h 30m   │ Work on RF-9999
-  10:30-11:30 │ RF-4518  │ 1h 0m    │ Team Daily
-  11:30-14:30 │ RF-5555  │ 3h 0m    │ Work on RF-5555
+  09:00-10:00 │ AB-1234  │ 1h 0m    │ Work on AB-1234
+  10:00-10:30 │ AB-9999  │ 0h 30m   │ Work on AB-9999
+  10:30-11:30 │ AB-1234  │ 1h 0m    │ Team Daily
+  11:30-14:30 │ AB-5555  │ 3h 0m    │ Work on AB-5555
   ...
 ─────────────────────────────────────────────
   Total: Xh Ym / 8h 0m
