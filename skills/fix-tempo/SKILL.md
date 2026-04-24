@@ -141,14 +141,20 @@ If the date is a Saturday or Sunday, skip it and print:
 ⏭️ <DATE> — weekend, skipping.
 ```
 
-### Step 8b: Skip fully logged days
+### Step 8b: Check existing worklogs for this day
 
-Using the data from Step 5, if this date already has >= 8h logged:
-```
-⏭️ <DATE> — already logged (Xh Ym), skipping.
-```
+Using the data from Step 5, check this date's existing worklogs:
 
-If partially logged, note the existing total and reduce the target accordingly.
+- If total >= 8h (28800s): skip entirely.
+  ```
+  ⏭️ <DATE> — already logged (Xh Ym), skipping.
+  ```
+- If total > 0 but < 8h: this is a **partial day**. Note:
+  - `existing_minutes` — total time already logged
+  - `remaining_target` = 480 - existing_minutes
+  - `existing_tickets` — set of ticket keys already logged on this day (resolved from worklog issueId)
+  - `existing_windows` — time slots already occupied (startTime + duration) to avoid double-booking
+- If total == 0: full 8h to fill, no constraints.
 
 ### Step 8c: Fetch calendar meetings for this date
 
@@ -186,7 +192,13 @@ If skipping, print:
 ```
 Do NOT log meetings-only days either — if there's no real work to log, skip the whole day.
 
-Distribute the remaining work time (target minus meetings) across the valid tickets:
+**For partial days:** Before creating new entries, account for what's already logged:
+- Remove tickets from the Jira activity list that are already logged for this day (`existing_tickets` from Step 8b) — don't re-log work that's already recorded.
+- Treat existing worklog time slots as occupied windows (same as meetings) so new entries don't overlap them.
+- Only distribute the `remaining_target` minutes across the valid tickets.
+- If after removing already-logged tickets there are no new tickets left from Jira activity, skip the day.
+
+Distribute the remaining work time (remaining target minus new meetings to log) across the valid tickets:
 - If there's only 1 ticket: assign all remaining time to it.
 - If there are 2-5 tickets: distribute time roughly evenly, but use your judgment. If one ticket has much more activity, give it more time.
 - If there are 6+ tickets: distribute time across all of them, giving more time to tickets with more activity. Every entry must be at least 30 minutes — if distributing evenly would push some below 30min, drop the least-active tickets until all entries fit.
@@ -267,7 +279,8 @@ After processing all dates, print a final overview:
 - Gaps between records are fine. Records do not need to be contiguous.
 - Skip weekends entirely.
 - Skip days that already have 8h logged.
-- For partially logged days, only fill the gap.
+- For partially logged days, only fill the gap — never modify or delete existing worklogs, never re-log tickets that are already recorded for that day.
+- Treat existing worklogs as occupied time windows (like meetings) when scheduling new entries.
 - If an API call fails for one day, log the error and continue to the next day.
 - Cache Jira issue ID lookups across all days to minimize API calls.
 - All times are in the user's local timezone.
