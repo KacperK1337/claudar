@@ -98,11 +98,21 @@ Collect all meeting time slots as "occupied windows" for the next step.
 
 The user provided: `$ARGUMENTS`
 
-Parse the argument string as comma-separated entries in the format: `<TICKET> <DURATION>`.
+Parse the argument string as comma-separated entries in the format: `<TICKET> <DURATION> [DESCRIPTION]`.
+
+The description is optional — it's everything after the duration. Examples:
+- `AB-1234 1 hour` → ticket AB-1234, 1 hour, description: "Work on AB-1234"
+- `AB-1234 1 hour coding` → ticket AB-1234, 1 hour, description: "coding"
+- `AB-9999 30 min PR review` → ticket AB-9999, 30 min, description: "PR review"
+- `AB-1234 1 hour coding, AB-1234 0.5 hour PR review` → TWO separate records for AB-1234
+
+The same ticket can appear multiple times. Each comma-separated entry is always its own independent record — never merge or deduplicate entries, even if they share the same ticket key.
 
 Duration examples: `1 hour`, `1h`, `30 min`, `30m`, `1.5h`, `2 hours`, `90 min`.
 
-Convert each to minutes. Validate:
+Parsing strategy: the first token is always the ticket key (matches `[A-Z]+-\d+`), then consume the duration (a number followed by a time unit like h/hour/hours/m/min/minutes), and treat everything remaining as the description. If no description is provided, default to `"Work on <TICKET>"`.
+
+Convert each duration to minutes. Validate:
 - Each entry is at least 30 minutes. If less, reject it and inform the user.
 
 ## Step 6: Schedule work entries around meetings
@@ -134,7 +144,7 @@ curl -s -X POST "https://api.tempo.io/4/worklogs" \
     "startDate": "<YYYY-MM-DD>",
     "startTime": "<HH:MM:SS>",
     "authorAccountId": "<TEMPO_WORKER_ID>",
-    "description": "Work on <TICKET_KEY>"
+    "description": "<DESCRIPTION>"
   }'
 ```
 
@@ -159,8 +169,8 @@ Print a table of ALL records for the day:
 📋 Tempo Log for <DATE>
 ─────────────────────────────────────────────
   Time        │ Ticket   │ Duration │ Description
-  09:00-10:00 │ AB-1234  │ 1h 0m    │ Work on AB-1234
-  10:00-10:30 │ AB-9999  │ 0h 30m   │ Work on AB-9999
+  09:00-10:00 │ AB-1234  │ 1h 0m    │ coding
+  10:00-10:30 │ AB-9999  │ 0h 30m   │ PR review
   10:30-11:30 │ AB-1234  │ 1h 0m    │ Team Daily
   11:30-14:30 │ AB-5555  │ 3h 0m    │ Work on AB-5555
   ...

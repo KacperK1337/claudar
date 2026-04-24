@@ -52,9 +52,11 @@ export OUTLOOK_ICS_URL="url.ics"
 
 ## Usage
 ```text
-/add-tempo AB-1234 1 hour, AB-9999 30 min, AB-5555 3h 
-# This will log your meetings first, then 1 hour to AB-1234, 30 min to AB-9999, and 3 hours to AB-5555, automatically skipping around meetings.
+/add-tempo AB-1234 1 hour, AB-9999 30 min, AB-5555 3h
+/add-tempo AB-1234 1 hour coding, AB-9999 30 min PR review, AB-5555 3h bugfixes
 ```
+Description after the duration is optional. If omitted, defaults to "Work on AB-1234".
+Same ticket can appear multiple times — each entry is logged as a separate record.
 
 ## What it does
 1. Fetches today's calendar meetings and logs them to Tempo under specified meeting ticket
