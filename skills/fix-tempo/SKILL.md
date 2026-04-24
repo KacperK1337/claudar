@@ -113,7 +113,12 @@ If there are more results, paginate using `startAt`. Collect ALL issues.
 
 Group the filtered issues by their `updated` date. Each date gets a list of ticket keys the user touched that day.
 
-For dates with no Jira activity after filtering, use the meeting ticket as a fallback — all remaining time goes under `TEMPO_MEETING_TICKET` with description "General work".
+For dates with no Jira activity after filtering, **skip the day entirely** and print:
+```
+⏭️ <DATE> — no Jira activity found, skipping.
+```
+
+Do NOT fall back to logging generic time. If there's no real data about what the user worked on, don't log anything — it's better to have a gap than fake records.
 
 ## Step 7: Resolve ALL Jira issue IDs upfront
 
@@ -170,7 +175,18 @@ If parsing RRULE is too complex, at minimum handle `FREQ=WEEKLY;BYDAY=XX` patter
 
 Using the grouped data from Step 6, get the list of tickets for this date.
 
-Distribute the remaining work time (target minus meetings) across them:
+**Validate before proceeding.** Skip this day entirely if:
+- No tickets found for this date after project prefix filtering
+- The Jira API returned an error or malformed response for this date range
+- All tickets were filtered out (wrong project, no valid key, etc.)
+
+If skipping, print:
+```
+⏭️ <DATE> — no valid Jira activity, skipping.
+```
+Do NOT log meetings-only days either — if there's no real work to log, skip the whole day.
+
+Distribute the remaining work time (target minus meetings) across the valid tickets:
 - If there's only 1 ticket: assign all remaining time to it.
 - If there are 2-5 tickets: distribute time roughly evenly, but use your judgment. If one ticket has much more activity, give it more time.
 - If there are 6+ tickets: distribute time across all of them, giving more time to tickets with more activity. Every entry must be at least 30 minutes — if distributing evenly would push some below 30min, drop the least-active tickets until all entries fit.
@@ -240,6 +256,7 @@ After processing all dates, print a final overview:
 
 ## Rules
 
+- **Never log records without real Jira activity.** If no meaningful activity was found for a day (no results, broken response, or only irrelevant tickets after filtering), skip that day entirely. Do not fabricate or guess work entries.
 - Every record MUST be at least 30 minutes. No exceptions.
 - Every work entry MUST be logged as exactly ONE record. Never split entries.
 - Each day MUST total exactly 8 hours (480 minutes), unless partially pre-logged.
