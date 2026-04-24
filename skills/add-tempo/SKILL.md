@@ -4,7 +4,7 @@ description: Log time records to Jira Tempo with automatic calendar meeting inte
 disable-model-invocation: true
 ---
 
-You are a time-tracking assistant that logs work records into Jira Tempo. You combine calendar meetings with user-provided work entries to fill an 8-hour workday.
+You are a time-tracking assistant that logs work records into Jira Tempo. You combine Outlook calendar meetings with user-provided work entries to fill an 8-hour workday.
 
 ## Prerequisites
 
@@ -16,18 +16,14 @@ The following environment variables MUST be set. If any are missing, stop immedi
 | `JIRA_ORG` | Jira organization slug, e.g. `my-company` (URL becomes `https://my-company.atlassian.net`) |
 | `JIRA_EMAIL` | Jira account email address |
 | `JIRA_API_TOKEN` | Jira/Atlassian API token (generate at https://id.atlassian.com/manage-profile/security/api-tokens) |
-| `TEMPO_WORKER_ID` | Your Jira account ID (find via Jira profile or `GET /rest/api/3/myself`) |
 | `TEMPO_MEETING_TICKET` | Jira ticket key to log meeting time under, e.g. `AB-1234` |
-| `GCAL_ACCESS_TOKEN` | Google Calendar OAuth2 access token (or use `OUTLOOK_ACCESS_TOKEN` for Microsoft) |
-
-If using **Microsoft/Outlook** calendar instead of Google, set `OUTLOOK_ACCESS_TOKEN` instead of `GCAL_ACCESS_TOKEN`.
+| `OUTLOOK_ICS_URL` | Outlook published ICS calendar URL |
 
 Check them:
 ```bash
-for var in TEMPO_API_TOKEN JIRA_ORG JIRA_EMAIL JIRA_API_TOKEN TEMPO_WORKER_ID TEMPO_MEETING_TICKET; do
+for var in TEMPO_API_TOKEN JIRA_ORG JIRA_EMAIL JIRA_API_TOKEN TEMPO_MEETING_TICKET OUTLOOK_ICS_URL; do
   if [ -z "${!var}" ]; then echo "MISSING: $var"; fi
 done
-if [ -z "$GCAL_ACCESS_TOKEN" ] && [ -z "$OUTLOOK_ACCESS_TOKEN" ]; then echo "MISSING: GCAL_ACCESS_TOKEN or OUTLOOK_ACCESS_TOKEN"; fi
 ```
 
 If any are missing, print a helpful message telling the user to export them and stop.
@@ -42,9 +38,13 @@ JIRA_URL="https://${JIRA_ORG}.atlassian.net"
 
 ## Step 1: Resolve the account ID
 
-If `TEMPO_WORKER_ID` is not already set, fetch it:
+Fetch the Jira account ID automatically — this is used as the `authorAccountId` in Tempo API calls:
 ```bash
-curl -s -u "${JIRA_EMAIL}:${JIRA_API_TOKEN}" "${JIRA_URL}/rest/api/3/myself" | jq -r '.accountId'
+TEMPO_WORKER_ID=$(curl -s -u "${JIRA_EMAIL}:${JIRA_API_TOKEN}" "${JIRA_URL}/rest/api/3/myself" | jq -r '.accountId')
+if [ -z "$TEMPO_WORKER_ID" ] || [ "$TEMPO_WORKER_ID" = "null" ]; then
+  echo "Error: Failed to fetch Jira account ID. Check JIRA_EMAIL, JIRA_API_TOKEN, and JIRA_ORG." && exit 1
+fi
+echo "Resolved worker ID: ${TEMPO_WORKER_ID}"
 ```
 
 ## Step 2: Determine the target date
@@ -56,25 +56,20 @@ date +%Y-%m-%d
 
 ## Step 3: Fetch calendar meetings for today
 
-**Google Calendar:**
+Outlook calendars can be published as an ICS URL (no OAuth needed).
+To get it: Outlook Web → Settings → Calendar → Shared calendars → Publish a calendar → select "Can view all details" → copy the ICS link.
+
 ```bash
 TODAY=$(date +%Y-%m-%d)
-TIME_MIN="${TODAY}T00:00:00Z"
-TIME_MAX="${TODAY}T23:59:59Z"
-curl -s -H "Authorization: Bearer ${GCAL_ACCESS_TOKEN}" \
-  "https://www.googleapis.com/calendar/v3/calendars/primary/events?timeMin=${TIME_MIN}&timeMax=${TIME_MAX}&singleEvents=true&orderBy=startTime" \
-  | jq '[.items[] | select(.start.dateTime != null) | {summary: .summary, start: .start.dateTime, end: .end.dateTime}]'
+curl -s "${OUTLOOK_ICS_URL}" > /tmp/outlook_calendar.ics
 ```
 
-**Microsoft/Outlook:**
-```bash
-TODAY=$(date +%Y-%m-%d)
-curl -s -H "Authorization: Bearer ${OUTLOOK_ACCESS_TOKEN}" \
-  "https://graph.microsoft.com/v1.0/me/calendarview?startDateTime=${TODAY}T00:00:00&endDateTime=${TODAY}T23:59:59&\$select=subject,start,end" \
-  | jq '[.value[] | {summary: .subject, start: .start.dateTime, end: .end.dateTime}]'
-```
+Parse the `.ics` file to extract today's events. Look for `VEVENT` blocks where `DTSTART` falls on today's date. Extract:
+- `SUMMARY` → meeting name
+- `DTSTART` / `DTEND` → start and end times
 
-Parse each meeting into a list of `{name, startTime, endTime}` objects. Only include meetings that have concrete start/end times (skip all-day events). Convert all times to local timezone `HH:MM` format.
+Only include events with specific times (skip all-day events where DTSTART is a DATE, not DATETIME). Convert all times to local timezone `HH:MM` format.
+Parse each meeting into a list of `{name, startTime, endTime}` objects.
 
 ## Step 4: Create meeting records in Tempo
 
@@ -184,4 +179,3 @@ Print a table of ALL records for the day:
 - If an API call fails, show the error response body and stop. Do not silently skip entries.
 - All times are in the user's local timezone.
 - Do not fabricate calendar events. Only use what the API returns.
-
