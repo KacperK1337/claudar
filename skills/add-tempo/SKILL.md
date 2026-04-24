@@ -71,7 +71,18 @@ Parse the `.ics` file to extract today's events. Look for `VEVENT` blocks where 
 Only include events with specific times (skip all-day events where DTSTART is a DATE, not DATETIME). Convert all times to local timezone `HH:MM` format.
 Parse each meeting into a list of `{name, startTime, endTime}` objects.
 
-## Step 4: Create meeting records in Tempo
+## Step 4: Resolve Jira issue IDs
+
+The Tempo API requires numeric `issueId`, not the ticket key string. For every unique ticket key (the meeting ticket + all user-provided tickets), resolve it:
+
+```bash
+curl -s -u "${JIRA_EMAIL}:${JIRA_API_TOKEN}" "${JIRA_URL}/rest/api/3/issue/<TICKET_KEY>?fields=id" | jq -r '.id'
+```
+
+Cache the mapping (e.g. AB-4518 → 3134591) so you don't fetch the same ticket twice.
+If a ticket is not found, report the error and stop.
+
+## Step 5: Create meeting records in Tempo
 
 For each calendar meeting, log a Tempo worklog under ticket **`${TEMPO_MEETING_TICKET}`** with the meeting name as the description.
 
@@ -81,7 +92,7 @@ curl -s -X POST "https://api.tempo.io/4/worklogs" \
   -H "Authorization: Bearer ${TEMPO_API_TOKEN}" \
   -H "Content-Type: application/json" \
   -d '{
-    "issueKey": "${TEMPO_MEETING_TICKET}",
+    "issueId": <NUMERIC_ISSUE_ID>,
     "timeSpentSeconds": <duration_in_seconds>,
     "startDate": "<YYYY-MM-DD>",
     "startTime": "<HH:MM:SS>",
@@ -94,7 +105,7 @@ Validate each meeting is at least 30 minutes (1800 seconds). If a meeting is sho
 
 Collect all meeting time slots as "occupied windows" for the next step.
 
-## Step 5: Parse user work entries
+## Step 6: Parse user work entries
 
 The user provided: `$ARGUMENTS`
 
@@ -115,7 +126,7 @@ Parsing strategy: the first token is always the ticket key (matches `[A-Z]+-\d+`
 Convert each duration to minutes. Validate:
 - Each entry is at least 30 minutes. If less, reject it and inform the user.
 
-## Step 6: Schedule work entries around meetings
+## Step 7: Schedule work entries around meetings
 
 Build the day's schedule starting at **09:00** (9 AM).
 
@@ -131,7 +142,7 @@ Build the day's schedule starting at **09:00** (9 AM).
 
 For conflict resolution: if a work entry's duration would cause it to overlap a meeting, the entry should be placed BEFORE the meeting starts (shifting its start time earlier if needed, as early as 08:00) or split around the meeting. Never overlap.
 
-## Step 7: Log work entries to Tempo
+## Step 8: Log work entries to Tempo
 
 For each scheduled work entry, create a Tempo worklog:
 ```bash
@@ -139,7 +150,7 @@ curl -s -X POST "https://api.tempo.io/4/worklogs" \
   -H "Authorization: Bearer ${TEMPO_API_TOKEN}" \
   -H "Content-Type: application/json" \
   -d '{
-    "issueKey": "<TICKET_KEY>",
+    "issueId": <NUMERIC_ISSUE_ID>,
     "timeSpentSeconds": <duration_in_seconds>,
     "startDate": "<YYYY-MM-DD>",
     "startTime": "<HH:MM:SS>",
@@ -153,7 +164,7 @@ Print each logged entry as confirmation:
 ✅ <HH:MM>-<HH:MM> | <TICKET> | <duration> | <description>
 ```
 
-## Step 8: Validate the 8-hour day
+## Step 9: Validate the 8-hour day
 
 Sum all logged time (meetings + work entries) in minutes.
 
@@ -161,7 +172,7 @@ Sum all logged time (meetings + work entries) in minutes.
 - If total < 480: calculate the gap and print `⚠️ Day incomplete — missing <X>h <Y>m. Add more entries to fill the day.`
 - If total > 480: print `⚠️ Day exceeds 8h — total is <X>h <Y>m. Review entries.`
 
-## Step 9: Print final summary
+## Step 10: Print final summary
 
 Print a table of ALL records for the day:
 
