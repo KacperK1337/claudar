@@ -42,8 +42,7 @@ This backfills every workday from April 1st through yesterday.
 2. Skips weekends and days that already have 8h logged in Tempo
 3. For each missing day:
    - Fetches calendar meetings from Outlook ICS (skips non-work events)
-   - Queries Jira for issues the user was active on that day
-   - Filters tickets to the user's main project only (based on `TEMPO_MEETING_TICKET` prefix or dominant prefix in activity)
+   - Queries Jira for issues the user actively worked on (status transitions, active tickets) — filtered to main project only
    - Distributes remaining work time across those tickets (min 30min each)
    - Auto-adjusts durations to total exactly 8 hours
    - Schedules entries around meetings and logs everything to Tempo

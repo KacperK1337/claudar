@@ -92,26 +92,29 @@ Group the results by `startDate`. For each date, sum `timeSpentSeconds` to know:
 - Which days are partially logged → calculate the gap
 - Which days have nothing → full 8h to fill
 
-## Step 6: Batch-fetch Jira activity for the entire range
+## Step 6: Fetch Jira activity for each day
 
-Instead of querying Jira day-by-day, fetch ALL activity for the full range in one query:
+For each workday in the range (that isn't already fully logged), fetch the user's actual Jira activity using multiple JQL queries. Run them **per day** because `DURING` requires specific date pairs.
 
+**Primary query — status transitions (most reliable):**
 ```bash
 curl -s -u "${JIRA_EMAIL}:${JIRA_API_TOKEN}" \
-  "${JIRA_URL}/rest/api/3/search" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "jql": "assignee = currentUser() AND updated >= \"<START_DATE>\" AND updated <= \"<END_DATE>\" ORDER BY updated DESC",
-    "maxResults": 100,
-    "fields": ["key", "summary", "updated"]
-  }'
+  "${JIRA_URL}/rest/api/3/search/jql?jql=status%20changed%20BY%20currentUser()%20DURING%20(%22<DATE>%22%2C%22<DATE_PLUS_1>%22)&maxResults=50&fields=key,summary"
 ```
 
-If there are more results, paginate using `startAt`. Collect ALL issues.
+This finds issues where the user made status transitions on that day (e.g. moved to In Progress, In Review, Done). This is the most accurate signal of real work.
+
+**Fallback query — if primary returns nothing:**
+```bash
+curl -s -u "${JIRA_EMAIL}:${JIRA_API_TOKEN}" \
+  "${JIRA_URL}/rest/api/3/search/jql?jql=assignee%20%3D%20currentUser()%20AND%20status%20in%20(%22In%20Progress%22%2C%22In%20Review%22%2C%22Code%20Review%22)%20AND%20updated%20%3E%3D%20%22<DATE>%22%20AND%20updated%20%3C%20%22<DATE_PLUS_1>%22&maxResults=50&fields=key,summary"
+```
+
+This finds issues assigned to the user that were in an active status and updated on that day.
+
+**Combine results:** Merge tickets from both queries (deduplicate by key).
 
 **Filter to main project only:** Only keep tickets whose key starts with the project prefix from Step 3. If a different prefix accounts for 70%+ of all results, use that prefix instead.
-
-Group the filtered issues by their `updated` date. Each date gets a list of ticket keys the user touched that day.
 
 For dates with no Jira activity after filtering, **skip the day entirely** and print:
 ```
@@ -119,6 +122,8 @@ For dates with no Jira activity after filtering, **skip the day entirely** and p
 ```
 
 Do NOT fall back to logging generic time. If there's no real data about what the user worked on, don't log anything — it's better to have a gap than fake records.
+
+**Important limitation:** Tempo's automatic time tracking suggestions (the exact durations you see in the Tempo UI) are not available via any public API. This skill uses Jira issue history as the best available proxy. The tickets found will match what you worked on, but the time distribution across them is estimated, not exact.
 
 ## Step 7: Resolve ALL Jira issue IDs upfront
 
@@ -179,7 +184,7 @@ If parsing RRULE is too complex, at minimum handle `FREQ=WEEKLY;BYDAY=XX` patter
 
 ### Step 8d: Build work entries from Jira activity
 
-Using the grouped data from Step 6, get the list of tickets for this date.
+Using the Jira activity results from Step 6 for this date, get the list of tickets.
 
 **Validate before proceeding.** Skip this day entirely if:
 - No tickets found for this date after project prefix filtering
