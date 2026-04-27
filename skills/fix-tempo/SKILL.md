@@ -1,293 +1,207 @@
 ---
 name: fix-tempo
-description: Backfill missing Tempo logs for past dates using Jira activity and calendar meetings
-disable-model-invocation: true
+description: backfill missing tempo worklogs since date provided by the user
 ---
 
-You are a time-tracking assistant that backfills missing Tempo worklogs for a range of past dates. For each missing day, you automatically determine what the user worked on using Jira issue activity, combine it with calendar meetings, and log a full 8-hour day to Tempo.
+# Fix Tempo
+Backfill missing Tempo worklogs from a start date. 
+Jira activity is the required work signal.
+Outlook ICS meetings fill the rest up to 8h/day. 
+Never log without real Jira activity for that date — meetings alone don't count.
+
+## Core principle
+Tempo's Activity Feed isn't exposed publicly. Approximate it via public Jira APIs using comments, creations, transitions, assignee changes, field edits, and updates by the current user — not just status changes.
 
 ## Prerequisites
+Required env vars:
 
-Same environment variables as `add-tempo`. All MUST be set:
+| Variable                | Description                                                                      |
+|-------------------------|----------------------------------------------------------------------------------|
+| `TEMPO_API_TOKEN`       | Tempo REST API token                                                             |
+| `TEMPO_MEETING_TICKET`  | Jira ticket key to log meetings under, e.g. `AB-1234`                            |
+| `JIRA_API_TOKEN`        | Jira/Atlassian API token                                                         |
+| `JIRA_ORG`              | Jira organization slug, e.g. `my-company` for `https://my-company.atlassian.net` |
+| `JIRA_EMAIL`            | Jira account email address                                                       |
+| `OUTLOOK_ICS_URL`       | Outlook published ICS calendar URL                                               |
 
-| Variable | Description |
-|---|---|
-| `TEMPO_API_TOKEN` | Tempo REST API token (generate at Tempo > Settings > API Integration) |
-| `JIRA_ORG` | Jira organization slug, e.g. `my-company` (URL becomes `https://my-company.atlassian.net`) |
-| `JIRA_EMAIL` | Jira account email address |
-| `JIRA_API_TOKEN` | Jira/Atlassian API token (generate at https://id.atlassian.com/manage-profile/security/api-tokens) |
-| `TEMPO_MEETING_TICKET` | Jira ticket key to log meeting time under, e.g. `AB-1234` |
-| `OUTLOOK_ICS_URL` | Outlook published ICS calendar URL |
-
-Check them:
+Verify them; if any are missing, tell the user to export them and stop:
 ```bash
 for var in TEMPO_API_TOKEN JIRA_ORG JIRA_EMAIL JIRA_API_TOKEN TEMPO_MEETING_TICKET OUTLOOK_ICS_URL; do
   if [ -z "${!var}" ]; then echo "MISSING: $var"; fi
 done
-```
-
-If any are missing, print a helpful message telling the user to export them and stop.
-
-Construct the Jira base URL:
-```bash
-if [ -z "$JIRA_ORG" ]; then
-  echo "Error: JIRA_ORG is not set." && exit 1
-fi
 JIRA_URL="https://${JIRA_ORG}.atlassian.net"
 ```
 
 ## Step 1: Parse arguments
+One arg: start date `YYYY-MM-DD` (e.g. `/fix-tempo 2026-04-01`). If missing/invalid, print `Usage: /fix-tempo 2026-04-01`. Build the workday list (Mon–Fri only) from start date through **yesterday**, inclusive. Never include today — today's hours aren't done yet, so this skill must not touch them.
 
-The user provided: `$ARGUMENTS`
-
-This is a **start date** in `YYYY-MM-DD` format (e.g. `2026-04-01`).
-The end date is always **yesterday** (today is handled by `add-tempo`).
-
-If the argument is missing or invalid, tell the user:
-```
-Usage: /fix-tempo 2026-04-01
-```
-
-Build the list of dates from start date to yesterday (inclusive).
-
-## Step 2: Resolve the account ID
-
+## Step 2: Resolve Tempo worker ID
 ```bash
 TEMPO_WORKER_ID=$(curl -s -u "${JIRA_EMAIL}:${JIRA_API_TOKEN}" "${JIRA_URL}/rest/api/3/myself" | jq -r '.accountId')
-if [ -z "$TEMPO_WORKER_ID" ] || [ "$TEMPO_WORKER_ID" = "null" ]; then
-  echo "Error: Failed to fetch Jira account ID. Check JIRA_EMAIL, JIRA_API_TOKEN, and JIRA_ORG." && exit 1
-fi
-echo "Resolved worker ID: ${TEMPO_WORKER_ID}"
 ```
+Fail fast if empty/null. Use this same ID to identify changelog authors.
 
-## Step 3: Determine the user's project prefix
+## Step 3: Determine project prefix
+Start with the prefix from `TEMPO_MEETING_TICKET` (e.g. `RF-4518` → `RF`). After collecting Jira activity, if ≥70% of scored activity belongs to a different prefix, switch to that one. Only log work tickets from the selected prefix.
 
-The project prefix is used to filter out tickets that don't belong to the user's main project.
-
-Extract the prefix from `TEMPO_MEETING_TICKET` — it's everything before the dash. E.g. if `TEMPO_MEETING_TICKET=RF-4518`, the prefix is `RF`.
-
-This will be validated later: when fetching Jira activity, if the vast majority of tickets (e.g. 70%+) share a different prefix, use that one instead. But start with the meeting ticket prefix as the default.
-
-## Step 4: Fetch the ICS calendar once
-
-Download the ICS file once — it contains all past and future events:
+## Step 4: Fetch Outlook ICS once
 ```bash
 curl -s "${OUTLOOK_ICS_URL}" > /tmp/outlook_calendar.ics
 ```
+Re-parse this file for each date.
 
-This file will be re-parsed for each date in the loop.
-
-## Step 5: Batch-fetch existing Tempo worklogs for the entire range
-
-Instead of checking each day individually, fetch ALL existing worklogs for the full date range in one call:
+## Step 5: Batch-fetch existing Tempo worklogs
+One call for the full range (paginate via `offset` if >1000):
 ```bash
 curl -s -H "Authorization: Bearer ${TEMPO_API_TOKEN}" \
   "https://api.tempo.io/4/worklogs/user/${TEMPO_WORKER_ID}?from=<START_DATE>&to=<END_DATE>&limit=1000"
 ```
+Group by `startDate`. Per date compute total logged seconds, logged ticket keys/issue IDs, and occupied windows (`startTime` + duration). Use this to skip ≥8h days, fill only gaps on partial days, avoid double-booking, and avoid logging the same ticket twice on the same day.
 
-If there are more than 1000 results, paginate using the `offset` parameter.
+## Step 6: Fetch Jira activity (Tempo-like signals)
+For each workday not already fully logged, run these queries with `<DATE>` inclusive and `<DATE_PLUS_1>` exclusive.
 
-Group the results by `startDate`. For each date, sum `timeSpentSeconds` to know:
-- Which days are fully logged (>= 28800s / 8h) → skip
-- Which days are partially logged → calculate the gap
-- Which days have nothing → full 8h to fill
-
-## Step 6: Fetch Jira activity for each day
-
-For each workday in the range (that isn't already fully logged), fetch the user's actual Jira activity using multiple JQL queries. Run them **per day** because `DURING` requires specific date pairs.
-
-**Primary query — status transitions (most reliable):**
+**A — status transitions by current user (strong):**
 ```bash
 curl -s -u "${JIRA_EMAIL}:${JIRA_API_TOKEN}" \
-  "${JIRA_URL}/rest/api/3/search/jql?jql=status%20changed%20BY%20currentUser()%20DURING%20(%22<DATE>%22%2C%22<DATE_PLUS_1>%22)&maxResults=50&fields=key,summary"
+  "${JIRA_URL}/rest/api/3/search/jql?jql=status%20changed%20BY%20currentUser()%20DURING%20(%22<DATE>%22%2C%22<DATE_PLUS_1>%22)&maxResults=50&fields=key,summary,updated,status"
 ```
 
-This finds issues where the user made status transitions on that day (e.g. moved to In Progress, In Review, Done). This is the most accurate signal of real work.
-
-**Fallback query — if primary returns nothing:**
+**B — issues commented by user** (skip if `commentedBy` unsupported):
 ```bash
 curl -s -u "${JIRA_EMAIL}:${JIRA_API_TOKEN}" \
-  "${JIRA_URL}/rest/api/3/search/jql?jql=assignee%20%3D%20currentUser()%20AND%20status%20in%20(%22In%20Progress%22%2C%22In%20Review%22%2C%22Code%20Review%22)%20AND%20updated%20%3E%3D%20%22<DATE>%22%20AND%20updated%20%3C%20%22<DATE_PLUS_1>%22&maxResults=50&fields=key,summary"
+  "${JIRA_URL}/rest/api/3/search/jql?jql=commentedBy%20%3D%20currentUser()%20AND%20updated%20%3E%3D%20%22<DATE>%22%20AND%20updated%20%3C%20%22<DATE_PLUS_1>%22&maxResults=50&fields=key,summary,updated,status"
 ```
 
-This finds issues assigned to the user that were in an active status and updated on that day.
-
-**Combine results:** Merge tickets from both queries (deduplicate by key).
-
-**Filter to main project only:** Only keep tickets whose key starts with the project prefix from Step 3. If a different prefix accounts for 70%+ of all results, use that prefix instead.
-
-For dates with no Jira activity after filtering, **skip the day entirely** and print:
-```
-⏭️ <DATE> — no Jira activity found, skipping.
+**C — issues created by user:**
+```bash
+curl -s -u "${JIRA_EMAIL}:${JIRA_API_TOKEN}" \
+  "${JIRA_URL}/rest/api/3/search/jql?jql=creator%20%3D%20currentUser()%20AND%20created%20%3E%3D%20%22<DATE>%22%20AND%20created%20%3C%20%22<DATE_PLUS_1>%22&maxResults=50&fields=key,summary,created,updated,status"
 ```
 
-Do NOT fall back to logging generic time. If there's no real data about what the user worked on, don't log anything — it's better to have a gap than fake records.
+**D — assigned issues updated that day (weak, must not dominate over A/B/changelog):**
+```bash
+curl -s -u "${JIRA_EMAIL}:${JIRA_API_TOKEN}" \
+  "${JIRA_URL}/rest/api/3/search/jql?jql=assignee%20%3D%20currentUser()%20AND%20updated%20%3E%3D%20%22<DATE>%22%20AND%20updated%20%3C%20%22<DATE_PLUS_1>%22&maxResults=50&fields=key,summary,updated,status,assignee"
+```
 
-**Important limitation:** Tempo's automatic time tracking suggestions (the exact durations you see in the Tempo UI) are not available via any public API. This skill uses Jira issue history as the best available proxy. The tickets found will match what you worked on, but the time distribution across them is estimated, not exact.
+**E — optional dev links** (commits/PRs/builds): extra evidence only; if unavailable, continue silently.
 
-## Step 7: Resolve ALL Jira issue IDs upfront
+## Step 7: Enrich with changelog
+For each unique issue:
+```bash
+curl -s -u "${JIRA_EMAIL}:${JIRA_API_TOKEN}" \
+  "${JIRA_URL}/rest/api/3/issue/<TICKET_KEY>?fields=key,summary,status,assignee,created,updated&expand=changelog"
+```
+Paginate if needed. Only count entries where `author.accountId == TEMPO_WORKER_ID` and `created` is on the target date in the user's local timezone.
 
-Collect every unique ticket key across all days (meeting ticket + all work tickets). Resolve them all before starting the logging loop:
+Score each issue:
 
+| Signal                                                                                        |  Score |
+|-----------------------------------------------------------------------------------------------|-------:|
+| User comment on issue                                                                         |     +5 |
+| Status transition by user                                                                     |     +5 |
+| Issue created by user                                                                         |     +4 |
+| Assignee changed by user                                                                      |     +3 |
+| Issue moved, sprint/priority/labels/fix version changed by user                               |     +2 |
+| Description/summary/other field edited by user                                                |     +2 |
+| Issue assigned to user and updated that day                                                   |     +1 |
+| Development link signal, if available                                                         |     +2 |
+
+Track signal reasons (`comment`, `transition`, `created`, `assignee change`, `field edit`, `updated assigned issue`). Drop tickets with score `0`.
+
+## Step 8: Merge, rank, filter
+Per date: merge query results by issue key, add changelog scores, sort by score desc, apply prefix filter, drop empty results. If nothing remains:
+```text
+⏭️ <DATE> — no Jira activity signals found, skipping.
+```
+
+## Step 9: Resolve Jira issue IDs upfront
+Collect every unique ticket key (incl. `TEMPO_MEETING_TICKET`) and resolve once; cache key→ID. Don't re-resolve in the logging loop.
 ```bash
 curl -s -u "${JIRA_EMAIL}:${JIRA_API_TOKEN}" "${JIRA_URL}/rest/api/3/issue/<TICKET_KEY>?fields=id" | jq -r '.id'
 ```
 
-Store the full mapping. This avoids redundant lookups during the per-day loop.
+## Step 10: Process each date chronologically
 
-## Step 8: Process each date
+**10a — Weekends:** `⏭️ <DATE> — weekend, skipping.`
 
-For each date in the range, perform the following sub-steps. Process dates **in chronological order**.
+**10b — Existing worklogs** (from Step 5; never modify or delete):
+- ≥ 8h → `⏭️ <DATE> — already logged (Xh Ym), skipping.`
+- 0 < total < 8h → `remaining_target = 480 - existing_minutes`; track `existing_tickets` and `existing_windows`.
+- 0 → target = 480 min.
 
-### Step 8a: Skip weekends
+**10c — Calendar meetings for the date:** From `/tmp/outlook_calendar.ics`, extract `VEVENT`s with `DTSTART` on the target date; pull `SUMMARY`, `DTSTART`, `DTEND`, `STATUS`, and the user's `ATTENDEE;PARTSTAT`. Skip the event if any of these are true:
+- `STATUS:CANCELLED` (event was cancelled)
+- enclosing `METHOD:CANCEL`
+- the user's own `ATTENDEE` line has `PARTSTAT=DECLINED`
+- it's an all-day event (DATE-only `DTSTART`)
+- the `SUMMARY` matches a non-work keyword (case-insensitive): lunch, breakfast, dinner, gym, doctor, dentist, break, pick up, drop off, personal, errand, school, commute, vacation, holiday — when unsure, skip.
 
-If the date is a Saturday or Sunday, skip it and print:
+Also honor `EXDATE` for recurring series and recurrence overrides via `RECURRENCE-ID` (a recurrence override with `STATUS:CANCELLED` cancels just that one occurrence). Convert `DTSTART`/`DTEND` to local `HH:MM`. Handle RRULEs at minimum: `FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR`, `FREQ=WEEKLY;BYDAY=TH`, `FREQ=DAILY`. Meetings that survive all filters are logged under `TEMPO_MEETING_TICKET` and take priority over work entries.
+
+**10d — Jira work entries:** Use scored Jira activity for the date. On partial days, remove tickets already logged that day, treat existing windows as occupied, and distribute only the remaining target. If no new valid tickets remain, skip the day.
+
+**10e — Allocate work time by score:**
+```text
+target_minutes  = 480 if no existing logs else 480 - existing_minutes
+meeting_minutes = sum(new valid work meeting durations)
+work_minutes    = target_minutes - meeting_minutes
 ```
-⏭️ <DATE> — weekend, skipping.
-```
+If `work_minutes < 30`: skip work entries; log only meetings if Jira activity exists for the date and meetings fit. Never trim meetings — drop ones that don't fit.
 
-### Step 8b: Check existing worklogs for this day
+Allocate proportionally to score: sum scores → split minutes → round to 30-min blocks → drop lowest-score tickets if any would receive <30 min → every entry ≥ 30 min → apply rounding adjustment to highest-score ticket first → never split a ticket across multiple Tempo records.
 
-Using the data from Step 5, check this date's existing worklogs:
+Each work entry description: `Working hard`.
 
-- If total >= 8h (28800s): skip entirely.
-  ```
-  ⏭️ <DATE> — already logged (Xh Ym), skipping.
-  ```
-- If total > 0 but < 8h: this is a **partial day**. Note:
-  - `existing_minutes` — total time already logged
-  - `remaining_target` = 480 - existing_minutes
-  - `existing_tickets` — set of ticket keys already logged on this day (resolved from worklog issueId)
-  - `existing_windows` — time slots already occupied (startTime + duration) to avoid double-booking
-- If total == 0: full 8h to fill, no constraints.
+**10f — Adjust to target:** New entries must sum to `target_minutes` unless impossible. Never shrink any record below 30 min. Never adjust meeting durations. If impossible, log the closest safe amount below target and print the reason.
 
-### Step 8c: Fetch calendar meetings for this date
+**10g — Schedule:** Start at 09:00 local. Meetings and existing windows are immovable; new work entries flex around them. Never double-book or split. Gaps allowed; not required to be contiguous.
 
-Parse the already-downloaded `/tmp/outlook_calendar.ics` file to extract events for this specific date.
-
-Look for `VEVENT` blocks where `DTSTART` falls on this date. Extract:
-- `SUMMARY` → meeting name
-- `DTSTART` / `DTEND` → start and end times
-
-Skip all-day events (DTSTART is DATE not DATETIME). Convert to local timezone `HH:MM` format.
-
-**Filter out non-work events:** Skip any event that looks like a personal or non-work activity (lunch, breakfast, dinner, gym, doctor, dentist, break, pick up, drop off, personal, errand, etc.). Match case-insensitively. When in doubt, skip it.
-
-**Also handle recurring events:** ICS files encode recurring events with `RRULE`. For each `VEVENT` with an `RRULE`, check if the recurrence pattern includes the target date. Common patterns:
-- `RRULE:FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR` — weekday recurrence
-- `RRULE:FREQ=WEEKLY;BYDAY=TH` — every Thursday
-- `RRULE:FREQ=DAILY` — every day
-
-Also check `EXDATE` entries which exclude specific dates from the recurrence.
-
-If parsing RRULE is too complex, at minimum handle `FREQ=WEEKLY;BYDAY=XX` patterns since most work meetings are weekly recurring.
-
-### Step 8d: Build work entries from Jira activity
-
-Using the Jira activity results from Step 6 for this date, get the list of tickets.
-
-**Validate before proceeding.** Skip this day entirely if:
-- No tickets found for this date after project prefix filtering
-- The Jira API returned an error or malformed response for this date range
-- All tickets were filtered out (wrong project, no valid key, etc.)
-
-If skipping, print:
-```
-⏭️ <DATE> — no valid Jira activity, skipping.
-```
-Do NOT log meetings-only days either — if there's no real work to log, skip the whole day.
-
-**For partial days:** Before creating new entries, account for what's already logged:
-- Remove tickets from the Jira activity list that are already logged for this day (`existing_tickets` from Step 8b) — don't re-log work that's already recorded.
-- Treat existing worklog time slots as occupied windows (same as meetings) so new entries don't overlap them.
-- Only distribute the `remaining_target` minutes across the valid tickets.
-- If after removing already-logged tickets there are no new tickets left from Jira activity, skip the day.
-
-Distribute the remaining work time (remaining target minus new meetings to log) across the valid tickets:
-- If there's only 1 ticket: assign all remaining time to it.
-- If there are 2-5 tickets: distribute time roughly evenly, but use your judgment. If one ticket has much more activity, give it more time.
-- If there are 6+ tickets: distribute time across all of them, giving more time to tickets with more activity. Every entry must be at least 30 minutes — if distributing evenly would push some below 30min, drop the least-active tickets until all entries fit.
-- Every entry must be at least 30 minutes.
-- Each entry gets description "Work on <TICKET_KEY>".
-
-### Step 8e: Auto-adjust durations to fill 8 hours (or remaining gap)
-
-Calculate the target for this day:
-- If no existing worklogs: target = 480 minutes
-- If partially logged: target = 480 - existing_minutes
-
-Sum meetings + work entries. If the total doesn't match the target, adjust work entry durations using your best judgment. Never shrink below 30 minutes. Never adjust meeting durations.
-
-### Step 8f: Schedule entries
-
-Schedule work entries around meetings starting at 09:00, same logic as `add-tempo`:
-- Jump past meetings, never split entries, gaps are OK.
-
-### Step 8g: Log all records for this day in parallel
-
-Tempo has no bulk API, so fire all POST requests for this day in parallel using background processes:
-
+**10h — Post worklogs in parallel per day** (no bulk API):
 ```bash
-# Fire all curls for one day in parallel
 for each record; do
   curl -s -X POST "https://api.tempo.io/4/worklogs" \
     -H "Authorization: Bearer ${TEMPO_API_TOKEN}" \
     -H "Content-Type: application/json" \
     -d '{...}' &
 done
-wait  # wait for all background jobs to finish
+wait
 ```
+On any failure, mark the day partial and continue.
 
-This means a day with 5 records takes ~1 API round-trip instead of 5 sequential ones.
-
-Collect results and check for errors.
-
-### Step 8h: Print day confirmation
-
-After logging all records for a day, print a single line:
-```
+**10i — One-line day result:**
+```text
 ✅ <DATE> (<Day>) — <N> records, 8h 0m logged.
-```
-
-If a day had errors:
-```
 ⚠️ <DATE> (<Day>) — partial, 5h 30m logged (API error on 2 records).
 ```
 
-Do NOT print a full table per day — it's too noisy for large date ranges.
-
-## Step 9: Print grand summary
-
-After processing all dates, print a final overview:
-
-```
+## Step 11: Grand summary
+```text
 🏁 fix-tempo complete
 ─────────────────────────────────
   Backfilled:  15 days
-  Skipped:     4 weekends, 2 already logged
+  Skipped:     4 weekends, 2 already logged, 3 no Jira activity
   Total logged: 120h 0m
 ─────────────────────────────────
 ```
+Include: backfilled, weekends skipped, already logged, skipped (no activity), partial/error, total logged.
 
----
+## Hard rules
+- Never log without real Jira activity for that date; never use status transitions as the only signal; never fabricate work, meetings, or activity; never claim to fetch exact Tempo UI suggestions.
+- No meetings-only days unless valid Jira activity exists for that date.
+- Every Tempo record ≥ 30 min; every work entry = exactly one Tempo record (no splitting).
+- Fully backfilled days = exactly 8h when safely possible; partial days fill only the gap.
+- Never modify or delete existing worklogs; never double-book a slot.
+- Meetings always under `TEMPO_MEETING_TICKET` and take priority; skip non-work calendar events; skip cancelled events (`STATUS:CANCELLED`, `METHOD:CANCEL`, cancelled recurrence overrides) and meetings the user declined (`PARTSTAT=DECLINED`).
+- Only log work tickets from the selected main prefix.
+- Skip weekends and days already ≥8h.
+- Never log today — date range stops at yesterday (in the user's local timezone).
+- Continue past API errors. Cache Jira issue ID lookups. Use the user's local timezone for all comparisons.
 
-## Rules
-
-- **Never log records without real Jira activity.** If no meaningful activity was found for a day (no results, broken response, or only irrelevant tickets after filtering), skip that day entirely. Do not fabricate or guess work entries.
-- Every record MUST be at least 30 minutes. No exceptions.
-- Every work entry MUST be logged as exactly ONE record. Never split entries.
-- Each day MUST total exactly 8 hours (480 minutes), unless partially pre-logged.
-- Meetings are ALWAYS logged first under `${TEMPO_MEETING_TICKET}`. They take priority.
-- Skip non-work calendar events (lunch, breakfast, gym, personal errands, etc.).
-- Only log tickets from the user's main project (determined by `TEMPO_MEETING_TICKET` prefix or dominant prefix in Jira activity).
-- Never double-book a time slot. Meetings are immovable; work entries flex around them.
-- Gaps between records are fine. Records do not need to be contiguous.
-- Skip weekends entirely.
-- Skip days that already have 8h logged.
-- For partially logged days, only fill the gap — never modify or delete existing worklogs, never re-log tickets that are already recorded for that day.
-- Treat existing worklogs as occupied time windows (like meetings) when scheduling new entries.
-- If an API call fails for one day, log the error and continue to the next day.
-- Cache Jira issue ID lookups across all days to minimize API calls.
-- All times are in the user's local timezone.
-- Do not fabricate calendar events or Jira activity. Only use what the APIs return.
+## Accuracy note (use when asked)
+```text
+This uses the best available approximation of Tempo's Jira activity suggestions through public Jira APIs.
+Tempo's private Activity Feed can include signals that are not exposed publicly, so the result may not exactly match the cards shown in Tempo UI.
+```
 

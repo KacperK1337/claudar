@@ -4,12 +4,12 @@ Backfill missing Tempo logs for past dates using Jira activity and calendar meet
 Forgot to log Tempo for the last 3 weeks? Run this once and enjoy.
 
 ## Requirements
+
+### CMD tools
 - `curl` installed
 - `jq` installed
 
-## Environment Variables
-Same as `add-tempo` — if you already have those exported, you're good:
-
+### Environment Variables
 ```bash
 # Tempo:
 export TEMPO_API_TOKEN="your-tempo-api-token"
@@ -24,7 +24,13 @@ export JIRA_API_TOKEN="your-atlassian-api-token"
 export OUTLOOK_ICS_URL="url.ics"
 ```
 
-See `add-tempo` README for how to get each token/URL.
+Here's how to get each of those:
+- `TEMPO_API_TOKEN`: Tempo → Settings → API Integration → create a new token.
+- `TEMPO_MEETING_TICKET`: any Jira ticket key you use to log meetings under (e.g. `ABC-1234`).
+- `JIRA_ORG`: the slug in your Jira URL `https://<org>.atlassian.net`.
+- `JIRA_EMAIL`: the email tied to your Atlassian account.
+- `JIRA_API_TOKEN`: create at https://id.atlassian.com/manage-profile/security/api-tokens.
+- `OUTLOOK_ICS_URL`: Outlook → Calendar → Share → Publish a calendar → copy the ICS link.
 
 ## Installation
 ```bash
@@ -41,7 +47,7 @@ This backfills every workday from April 1st through yesterday.
 1. Builds a list of dates from the provided start date to yesterday
 2. Skips weekends and days that already have 8h logged in Tempo
 3. For each missing day:
-   - Fetches calendar meetings from Outlook ICS (skips non-work events)
+   - Fetches calendar meetings from Outlook ICS (skips non-work events, cancelled meetings, and meetings you declined)
    - Queries Jira for issues the user actively worked on (status transitions, active tickets) — filtered to main project only
    - Distributes remaining work time across those tickets (min 30min each)
    - Auto-adjusts durations to total exactly 8 hours
