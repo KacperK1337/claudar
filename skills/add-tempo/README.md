@@ -2,7 +2,7 @@
 Log time spend on Jira tickets as Tempo records with automatic calendar meeting resolution.
 Only supports Outlook calendar for now.
 
-Run once a day after your work-day is done and enjoy.
+Run once a day after your work-day is done and go home.
 
 ## Requirements
 - `curl` installed
