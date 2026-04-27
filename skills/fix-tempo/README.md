@@ -40,8 +40,16 @@ Here's how to get each of those:
 ## Usage
 ```text
 /fix-tempo 2026-04-01
+/fix-tempo april 1
+/fix-tempo january 2026
+/fix-tempo last monday
 ```
-This backfills every workday from April 1st through yesterday.
+The date argument is flexible:
+- `april 1` → April 1st of the current year
+- `january 2026` → January 1st, 2026 (missing day defaults to the 1st)
+- `2026` → January 1st, 2026
+- `2026-04-01`, `04/01/2026`, `last monday`, `3 weeks ago` — all work too
+Whatever you pass, the skill backfills every workday from that date through **yesterday** (today is never touched).
 
 ## What it does
 1. Builds a list of dates from the provided start date to yesterday

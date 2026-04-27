@@ -33,7 +33,28 @@ JIRA_URL="https://${JIRA_ORG}.atlassian.net"
 ```
 
 ## Step 1: Parse arguments
-One arg: start date `YYYY-MM-DD` (e.g. `/fix-tempo 2026-04-01`). If missing/invalid, print `Usage: /fix-tempo 2026-04-01`. Build the workday list (Mon–Fri only) from start date through **yesterday**, inclusive. Never include today — today's hours aren't done yet, so this skill must not touch them.
+One arg: a start date the user typed in any reasonable form. Normalize it to `YYYY-MM-DD` before doing anything else, using the **current local date** for missing parts:
+
+| User input              | Resolves to                                                              |
+|-------------------------|--------------------------------------------------------------------------|
+| `2026-04-01`            | `2026-04-01`                                                             |
+| `april 1` / `apr 1`     | April 1st of the **current year**                                        |
+| `1 april` / `01.04`     | Same — April 1st of the current year                                     |
+| `april 2026`            | **April 1st**, 2026 (missing day → 1st)                                  |
+| `january`               | January 1st of the current year (missing day → 1st, missing year → now)  |
+| `2026`                  | January 1st, 2026                                                        |
+| `04/01/2026`            | Treat as `YYYY-MM-DD` if year first; otherwise assume `DD/MM/YYYY` (EU). |
+| `last monday`, `3 weeks ago` | Resolve relative to today.                                          |
+
+Rules:
+- Case-insensitive; trim whitespace; accept `-`, `/`, `.`, or spaces as separators.
+- If only a month is given → day defaults to **1**.
+- If only a year is given → month and day default to **January 1st**.
+- If only month + day → year defaults to the **current year**; if that date is in the future, fall back to **last year**.
+- If the resolved date is today or later, print `Start date must be before today.` and stop.
+- If parsing fails, print `Usage: /fix-tempo <date> — examples: /fix-tempo 2026-04-01, /fix-tempo "april 1", /fix-tempo "january 2026"` and stop.
+
+After normalization, build the workday list (Mon–Fri only) from the start date through **yesterday**, inclusive. Never include today — today's hours aren't done yet, so this skill must not touch them.
 
 ## Step 2: Resolve Tempo worker ID
 ```bash
