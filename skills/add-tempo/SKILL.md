@@ -6,6 +6,15 @@ disable-model-invocation: true
 
 You are a time-tracking assistant that logs work records into Jira Tempo. You combine Outlook calendar meetings with user-provided work entries to fill an 8-hour workday.
 
+## Execution model
+
+This skill runs in two phases. Do NOT post anything to Tempo until the full plan is built:
+
+- **Phase A — Plan (Steps 1–8):** resolve IDs, fetch calendar, parse user entries, adjust durations, build the schedule. Zero writes.
+- **Phase B — Execute (Step 9):** POST every worklog (meetings + work entries) in a single batch, in parallel.
+
+If any planning step fails, stop before Phase B. This prevents partial state where meetings are logged but work entries failed validation.
+
 ## Prerequisites
 
 The following environment variables MUST be set. If any are missing, stop immediately and tell the user exactly which ones they need to export:
@@ -64,48 +73,56 @@ TODAY=$(date +%Y-%m-%d)
 curl -s "${OUTLOOK_ICS_URL}" > /tmp/outlook_calendar.ics
 ```
 
-Parse the `.ics` file to extract today's events. Look for `VEVENT` blocks where `DTSTART` falls on today's date. Extract:
+Parse the `.ics` file to extract today's events. Look for `VEVENT` blocks where `DTSTART` falls on today's date (after timezone conversion). Extract at minimum:
 - `SUMMARY` → meeting name
 - `DTSTART` / `DTEND` → start and end times
+- `STATUS`
+- enclosing `METHOD`
+- the user's `ATTENDEE;PARTSTAT`, when present
+- `UID`, `RECURRENCE-ID`, `EXDATE`, `RRULE`
 
-Only include events with specific times (skip all-day events where DTSTART is a DATE, not DATETIME). Convert all times to local timezone `HH:MM` format.
-Parse each meeting into a list of `{name, startTime, endTime}` objects.
+**Timezone handling:** `DTSTART`/`DTEND` may be UTC (`Z` suffix), floating, or carry a `TZID=` parameter. Convert to the user's local timezone before comparing against today's date. Use local `HH:MM` for Tempo `startTime`.
 
-**Filter out non-work events:** Skip any calendar event that looks like a personal or non-work activity. This includes (but is not limited to): lunch, breakfast, dinner, gym, doctor, dentist, break, pick up, drop off, personal, errand, etc. Match case-insensitively against the event summary/name. When in doubt, skip it — only include events that are clearly work meetings.
+**Recurrence handling:** honor at minimum:
+- `EXDATE` exclusions on recurring series
+- `RECURRENCE-ID` overrides (a `STATUS:CANCELLED` override cancels only that occurrence)
+- `RRULE` for `FREQ=DAILY` and `FREQ=WEEKLY;BYDAY=...` (any combination)
+
+**Skip the event** if any of these are true:
+- `STATUS:CANCELLED`
+- enclosing `METHOD:CANCEL`
+- the user's own `ATTENDEE` line has `PARTSTAT=DECLINED`
+- all-day event (`DATE`-only `DTSTART`)
+- no reliable start/end time
+- `SUMMARY` matches a non-work keyword (case-insensitive): `lunch`, `breakfast`, `dinner`, `gym`, `doctor`, `dentist`, `break`, `pick up`, `drop off`, `personal`, `errand`, `school`, `commute`, `vacation`, `holiday`
+
+When in doubt, skip — only include events that are clearly work meetings.
+
+Parse each remaining meeting into a list of `{name, startTime, endTime}` objects.
 
 ## Step 4: Resolve Jira issue IDs
 
-The Tempo API requires numeric `issueId`, not the ticket key string. For every unique ticket key (the meeting ticket + all user-provided tickets), resolve it:
+The Tempo API requires numeric `issueId`, not the ticket key string. Parse `$ARGUMENTS` first (see Step 6) so you know all user tickets, then resolve every unique ticket key (meeting ticket + user-provided tickets) in parallel:
 
 ```bash
-curl -s -u "${JIRA_EMAIL}:${JIRA_API_TOKEN}" "${JIRA_URL}/rest/api/3/issue/<TICKET_KEY>?fields=id" | jq -r '.id'
+for key in "${UNIQUE_TICKET_KEYS[@]}"; do
+  curl -s -u "${JIRA_EMAIL}:${JIRA_API_TOKEN}" "${JIRA_URL}/rest/api/3/issue/${key}?fields=id" &
+done
+wait
 ```
 
 Cache the mapping (e.g. AB-4518 → 3134591) so you don't fetch the same ticket twice.
-If a ticket is not found, report the error and stop.
+If any ticket is not found (`null` or 404), report the error and stop before Phase B.
 
-## Step 5: Create meeting records in Tempo
+## Step 5: Plan meeting records (no POST yet)
 
-For each calendar meeting, log a Tempo worklog under ticket **`${TEMPO_MEETING_TICKET}`** with the meeting name as the description.
+For each filtered calendar meeting, build a planned worklog under ticket **`${TEMPO_MEETING_TICKET}`** with the meeting name as the description. Do NOT call the Tempo API yet — these records are POSTed in Step 9 alongside work entries.
 
-The Tempo REST API endpoint to create a worklog:
-```bash
-curl -s -X POST "https://api.tempo.io/4/worklogs" \
-  -H "Authorization: Bearer ${TEMPO_API_TOKEN}" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "issueId": <NUMERIC_ISSUE_ID>,
-    "timeSpentSeconds": <duration_in_seconds>,
-    "startDate": "<YYYY-MM-DD>",
-    "startTime": "<HH:MM:SS>",
-    "authorAccountId": "<TEMPO_WORKER_ID>",
-    "description": "<meeting name from calendar>"
-  }'
-```
+Validate each meeting is at least 30 minutes (1800 seconds). If shorter, round UP to 30 minutes.
 
-Validate each meeting is at least 30 minutes (1800 seconds). If a meeting is shorter than 30 minutes, round it UP to 30 minutes.
+If two meetings overlap, keep the longer one and skip the other (or the more specific work-looking summary if durations match).
 
-Collect all meeting time slots as "occupied windows" for the next step.
+Collect all kept meeting time windows as "occupied windows" for scheduling. Sort by start time.
 
 ## Step 6: Parse user work entries
 
@@ -158,24 +175,30 @@ Build the day's schedule starting at **09:00** (9 AM).
 3. Work entries must not overlap with each other or with meetings.
 4. It is OK to have gaps/breaks between records. Records do not need to be back-to-back.
 
-## Step 9: Log work entries to Tempo
+## Step 9: POST all worklogs to Tempo (parallel)
 
-For each scheduled work entry, create a Tempo worklog:
+Now POST every record from the plan — meetings (Step 5) AND work entries (Step 8). Tempo has no bulk endpoint, so fire them in parallel and `wait`:
+
 ```bash
-curl -s -X POST "https://api.tempo.io/4/worklogs" \
-  -H "Authorization: Bearer ${TEMPO_API_TOKEN}" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "issueId": <NUMERIC_ISSUE_ID>,
-    "timeSpentSeconds": <duration_in_seconds>,
-    "startDate": "<YYYY-MM-DD>",
-    "startTime": "<HH:MM:SS>",
-    "authorAccountId": "<TEMPO_WORKER_ID>",
-    "description": "<DESCRIPTION>"
-  }'
+for record in "${ALL_RECORDS[@]}"; do
+  curl -s -X POST "https://api.tempo.io/4/worklogs" \
+    -H "Authorization: Bearer ${TEMPO_API_TOKEN}" \
+    -H "Content-Type: application/json" \
+    -d '{
+      "issueId": <NUMERIC_ISSUE_ID>,
+      "timeSpentSeconds": <duration_in_seconds>,
+      "startDate": "<YYYY-MM-DD>",
+      "startTime": "<HH:MM:SS>",
+      "authorAccountId": "<TEMPO_WORKER_ID>",
+      "description": "<DESCRIPTION>"
+    }' &
+done
+wait
 ```
 
-Print each logged entry as confirmation:
+If a POST returns a non-2xx response, capture and print the response body. After `wait`, if any POST failed, print every failure and exit non-zero — do not retry, do not silently skip.
+
+Print each posted entry as confirmation:
 ```
 ✅ <HH:MM>-<HH:MM> | <TICKET> | <duration> | <description>
 ```
