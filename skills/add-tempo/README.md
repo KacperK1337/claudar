@@ -15,7 +15,7 @@ Export these in your terminal before using it:
 ```bash
 # Tempo:
 export TEMPO_API_TOKEN="your-tempo-api-token"
-export TEMPO_MEETING_TICKET="ABC-1234" # Ticket to log meetings under
+export TEMPO_MEETING_TICKET="AB-1234" # Ticket to log meetings under
 
 # Jira:
 export JIRA_ORG="your-org"

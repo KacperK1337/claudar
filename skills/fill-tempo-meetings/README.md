@@ -12,7 +12,7 @@ Logging meetings under specific ticket from Tempo UI is hard. This skill focus o
 ```bash
 # Tempo:
 export TEMPO_API_TOKEN="your-tempo-api-token"
-export TEMPO_MEETING_TICKET="ABC-1234"
+export TEMPO_MEETING_TICKET="AB-1234"
 
 # Jira, used only to resolve your account ID and the meeting ticket issue ID:
 export JIRA_ORG="your-org"
