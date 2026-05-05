@@ -54,18 +54,17 @@ Whatever you pass, the skill backfills every workday from that date through **ye
 
 ## What it does
 1. Builds a list of workdays from the provided start date to yesterday.
-2. Fetches your Outlook ICS calendar once.
-3. Fetches existing Tempo worklogs for the full date range.
-4. For each workday:
+2. In parallel, fetches your Outlook ICS calendar, your Jira account ID, the meeting ticket issue ID, and existing Tempo worklogs for the full date range.
+3. For each workday:
    - Extracts real calendar meetings from Outlook ICS.
-   - Skips non-work events, cancelled meetings, declined meetings, all-day events, and meetings under 30 minutes.
+   - Skips non-work events, cancelled meetings (including ones flagged only via a `Canceled:`/`Cancelled:` summary prefix), declined meetings, all-day events, and meetings under 30 minutes.
    - Handles common recurring meetings, `EXDATE`, and cancelled recurrence overrides.
    - Skips meetings already covered by existing meeting worklogs.
    - Treats meeting times as authoritative.
    - Moves existing non-meeting Tempo records when they conflict with meeting windows.
    - Shortens existing non-meeting records if adding meetings would push the day above 8h.
    - Logs each remaining meeting under `TEMPO_MEETING_TICKET` with the real meeting duration.
-5. Prints a one-line result for each day and a grand total at the end.
+4. Fires every Tempo PUT (adjustment) and POST (new meeting) across all dates in a single parallel batch, then prints a one-line result for each day and a grand total at the end.
 
 ## Safety rules
 - Meetings only.
