@@ -58,13 +58,26 @@ export OUTLOOK_ICS_URL="url.ics"
 Description after the duration is optional. If omitted, defaults to "Work on AB-1234".
 Same ticket can appear multiple times — each entry is logged as a separate record.
 
+### Optional date prefix
+By default the skill logs to **today**. You can prefix the arguments with a date to log to a different day instead. The date prefix covers anything before the first ticket key.
+
+```text
+/add-tempo 2026-04-01 AB-1234 1 hour
+/add-tempo yesterday AB-1234 1 hour, AB-9999 30 min PR review
+/add-tempo april 1 AB-1234 1 hour coding
+/add-tempo last monday AB-5555 2h bugfixes
+```
+
+Accepted forms: `YYYY-MM-DD`, `today`, `yesterday`, `april 1`, `1 april`, `april 2026`, `04/01/2026` (EU `DD/MM/YYYY` if not year-first), `last monday`, `3 days ago`. Calendar meetings for that target date are fetched and logged the same way.
+
 ## What it does
-1. Fetches today's Outlook calendar meetings (skips non-work events like breakfast, lunch, etc.)
-2. Logs work meetings to Tempo under the configured `TEMPO_MEETING_TICKET`
-3. Parses your comma-separated ticket + duration + optional description entries
-4. **Auto-adjusts** durations so the day totals exactly 8 hours — if you're over or under, it intelligently adjusts entry durations to fit
-5. Schedules work entries starting at 9 AM, jumping over meetings (never splits an entry — each one stays as a single block)
-6. Resolves Jira issue IDs and logs everything to Tempo via the API
-7. Prints a final summary table of all records for the day
+1. Resolves the target date (today by default, or the optional date prefix in the arguments)
+2. Fetches Outlook calendar meetings for that date (skips non-work events like breakfast, lunch, etc.)
+3. Logs work meetings to Tempo under the configured `TEMPO_MEETING_TICKET`
+4. Parses your comma-separated ticket + duration + optional description entries
+5. **Auto-adjusts** durations so the day totals exactly 8 hours — if you're over or under, it intelligently adjusts entry durations to fit
+6. Schedules work entries starting at 9 AM, jumping over meetings (never splits an entry — each one stays as a single block)
+7. Resolves Jira issue IDs and logs everything to Tempo via the API
+8. Prints a final summary table of all records for the day
 
 Note: Your Jira account ID (needed by Tempo) is fetched automatically — no need to export it.
