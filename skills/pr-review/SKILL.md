@@ -88,13 +88,13 @@ gh pr diff <pr-number> --name-only
 This is where you earn your keep. For EVERY changed file:
 
 1. **Read the full changed file** (not just the diff) to understand the complete context.
-2. **Read related files** — imports, callers, tests, types, configs that interact with the changed code.
+2. **Read related files** - imports, callers, tests, types, configs that interact with the changed code.
 3. **Search the codebase** for existing patterns, utilities, and conventions relevant to the changes:
    - Grep for similar function names, patterns, or approaches already in the codebase.
    - Check if there are existing utilities or helpers that the PR should be reusing instead of reinventing.
    - Look at how neighboring or similar files are structured to identify convention violations.
-4. **Check test coverage** — find existing tests for changed modules, verify if the PR adds or updates tests appropriately.
-5. **Apply user context** — if the user provided extra review focus or constraints, use it to decide where to spend the most review effort.
+4. **Check test coverage** - find existing tests for changed modules, verify if the PR adds or updates tests appropriately.
+5. **Apply user context** - if the user provided extra review focus or constraints, use it to decide where to spend the most review effort.
 
 Spend significant effort on this step. Read broadly. The more codebase context you have, the better your review.
 
@@ -110,16 +110,16 @@ Summarize the extra context provided after the selector and explain how it affec
 
 ### Verdict
 One of:
-- **REJECT** — has critical issues that must be fixed before merge
-- **CHANGES REQUESTED** — solid direction but has issues that need addressing
-- **APPROVE WITH NITS** — good to merge, minor suggestions below
-- **APPROVE** — ship it (rare — earn this)
+- **REJECT** - has critical issues that must be fixed before merge
+- **CHANGES REQUESTED** - solid direction but has issues that need addressing
+- **APPROVE WITH NITS** - good to merge, minor suggestions below
+- **APPROVE** - ship it (rare - earn this)
 
 ### Critical Issues
 Issues that MUST be fixed. These block the PR. Each issue should reference the specific file and line(s).
 
 ### Major Concerns
-Significant problems that strongly should be addressed — design issues, potential bugs, performance problems, security concerns.
+Significant problems that strongly should be addressed - design issues, potential bugs, performance problems, security concerns.
 
 ### Minor Issues & Nits
 Style inconsistencies, naming suggestions, minor improvements, readability tweaks.
@@ -132,7 +132,7 @@ Specific observations about whether the PR follows established patterns in the c
 
 ---
 
-## Review criteria — check ALL of these:
+## Review criteria - check ALL of these:
 
 **Correctness**
 - Does the code actually do what it claims?
@@ -188,8 +188,8 @@ Specific observations about whether the PR follows established patterns in the c
 
 ---
 
-Be specific. Reference file paths and line numbers. Quote code snippets when pointing out issues. Do not be vague — every observation must be actionable.
-Do not produce long essays — be concise and to the point. The goal is to provide clear, actionable feedback that the author can use to improve the PR.
+Be specific. Reference file paths and line numbers. Quote code snippets when pointing out issues. Do not be vague - every observation must be actionable.
+Do not produce long essays - be concise and to the point. The goal is to provide clear, actionable feedback that the author can use to improve the PR.
 
 Never ignore additional review context. Either:
 

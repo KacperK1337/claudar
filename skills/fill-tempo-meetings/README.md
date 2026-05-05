@@ -1,35 +1,52 @@
 # fill-tempo-meetings
-Backfill missing Tempo logs for past calendar meetings only.
-Logging meetings under specific ticket from Tempo UI is hard. This skill focus on automating that process.
+Backfill missed Tempo entries for **past calendar meetings**, in bulk.
 
-## Requirements
+## Why use it
+If you forgot to log time for a week (or a month), opening Tempo and clicking through every meeting one by one is painful. 
+This skill reads your Outlook calendar, finds every real meeting on every workday since the date you give it, and creates the matching Tempo entries under one ticket.
 
-### CMD tools
-- `curl` installed
-- `jq` installed
+It does **not** invent any work.
+It only logs meetings that actually happened on your calendar.
 
-### Environment Variables
+## Quick example
+```text
+/fill-tempo-meetings april 1
+```
+
+For each workday from April 1st through yesterday, the skill:
+- pulls real meetings from your Outlook calendar,
+- skips lunches, gym, declined meetings, and anything cancelled,
+- creates one Tempo entry per meeting under your meeting ticket.
+
+At the end you get a per-day report and a grand total of hours logged.
+
+## Setup
+You need `curl` and `jq` on your machine, plus the following environment variables exported in your shell:
+
 ```bash
-# Tempo:
+# Tempo
 export TEMPO_API_TOKEN="your-tempo-api-token"
-export TEMPO_MEETING_TICKET="AB-1234"
+export TEMPO_MEETING_TICKET="AB-1234"   # Ticket key for which all meetings will be logged
 
-# Jira, used only to resolve your account ID and the meeting ticket issue ID:
-export JIRA_ORG="your-org"
+# Jira (used to look up your account ID and the meeting ticket's internal ID)
+export JIRA_ORG="your-org"              # The slug in https://<org>.atlassian.net
 export JIRA_EMAIL="you@company.com"
 export JIRA_API_TOKEN="your-atlassian-api-token"
 
-# Outlook Calendar:
-export OUTLOOK_ICS_URL="url.ics"
+# Outlook calendar (published ICS feed)
+export OUTLOOK_ICS_URL="https://outlook.office365.com/.../calendar.ics"
 ```
 
-Here's how to get each of those:
-- `TEMPO_API_TOKEN`: Tempo -> Settings -> API Integration -> create a new token.
-- `TEMPO_MEETING_TICKET`: the Jira ticket key you use to log meetings under, e.g. `ABC-1234`.
-- `JIRA_ORG`: the slug in your Jira URL `https://<org>.atlassian.net`.
-- `JIRA_EMAIL`: the email tied to your Atlassian account.
-- `JIRA_API_TOKEN`: create at https://id.atlassian.com/manage-profile/security/api-tokens.
-- `OUTLOOK_ICS_URL`: Outlook -> Calendar -> Share -> Publish a calendar -> copy the ICS link.
+How to get each one:
+
+| Variable               | Where to get it                                                                                                                          |
+|------------------------|------------------------------------------------------------------------------------------------------------------------------------------|
+| `TEMPO_API_TOKEN`      | Tempo → Settings → API Integration → **New Token**                                                                                       |
+| `TEMPO_MEETING_TICKET` | Any Jira ticket key your team uses for meeting time, e.g. `ABC-1234`                                                                     |
+| `JIRA_ORG`             | The subdomain in your Jira URL (`https://<org>.atlassian.net`)                                                                           |
+| `JIRA_EMAIL`           | The email on your Atlassian account                                                                                                      |
+| `JIRA_API_TOKEN`       | https://id.atlassian.com/manage-profile/security/api-tokens → **Create API token**                                                       |
+| `OUTLOOK_ICS_URL`      | Outlook Web → Settings → Calendar → Shared calendars → Publish a calendar (set permission to "Can view all details") → copy the ICS link |
 
 ## Installation
 ```bash
@@ -42,37 +59,60 @@ Here's how to get each of those:
 /fill-tempo-meetings april 1
 /fill-tempo-meetings january 2026
 /fill-tempo-meetings last monday
+/fill-tempo-meetings 3 weeks ago
 ```
 
-The date argument is flexible:
-- `april 1` -> April 1st of the current year
-- `january 2026` -> January 1st, 2026 (missing day defaults to the 1st)
-- `2026` -> January 1st, 2026
-- `2026-04-01`, `04/01/2026`, `last monday`, `3 weeks ago` all work too
+The date you pass is the **starting** day.
+The skill walks forward from there, one workday at a time, up to **yesterday**.
+Today is never touched (the day isn't over yet).
 
-Whatever you pass, the skill backfills every workday from that date through **yesterday**. Today is never touched.
+The date is forgiving:
 
-## What it does
-1. Builds a list of workdays from the provided start date to yesterday.
-2. Fetches your Outlook ICS calendar once.
-3. Fetches existing Tempo worklogs for the full date range.
-4. For each workday:
-   - Extracts real calendar meetings from Outlook ICS.
-   - Skips non-work events, cancelled meetings, declined meetings, all-day events, and meetings under 30 minutes.
-   - Handles common recurring meetings, `EXDATE`, and cancelled recurrence overrides.
-   - Skips meetings already covered by existing meeting worklogs.
-   - Treats meeting times as authoritative.
-   - Moves existing non-meeting Tempo records when they conflict with meeting windows.
-   - Shortens existing non-meeting records if adding meetings would push the day above 8h.
-   - Logs each remaining meeting under `TEMPO_MEETING_TICKET` with the real meeting duration.
-5. Prints a one-line result for each day and a grand total at the end.
+| You type                      | It means                                  |
+|-------------------------------|-------------------------------------------|
+| `2026-04-01`                  | April 1st, 2026                           |
+| `april 1` / `apr 1` / `01.04` | April 1st of the current year             |
+| `april 2026`                  | April 1st, 2026 (day defaults to the 1st) |
+| `2026`                        | January 1st, 2026                         |
+| `last monday`, `3 weeks ago`  | Resolved relative to today                |
 
-## Safety rules
-- Meetings only.
-- One Tempo record per meeting.
+Weekends are automatically skipped.
+
+## What happens on each day
+For every workday in the range, the skill:
+
+1. Reads that day's events from your Outlook calendar.
+2. Throws out anything that isn't a real work meeting:
+   - cancelled events (including ones flagged only by a `Canceled:` / `Cancelled:` summary prefix)
+   - meetings you declined
+   - all-day events
+   - lunches, gym, doctor, dentist, breaks, commutes, vacations, errands, etc.
+   - anything shorter than 30 minutes
+3. Skips meetings already logged in Tempo under your meeting ticket - no duplicates.
+4. If a non-meeting Tempo entry overlaps with a real meeting (or would push the day above 8h), it shifts or shortens that entry to make room. Existing meeting entries are left alone.
+5. Creates one Tempo record per remaining meeting, with the real start time and duration, under `TEMPO_MEETING_TICKET`.
+
+At the end you get a per-day line:
+```
+✅ 2026-04-02 (Thu) - 4 meeting records, 4h 20m logged, 0 existing records adjusted.
+⏭️ 2026-04-06 (Mon) - no meetings to log.
+```
+
+and a grand summary:
+```
+🏁 fill-tempo-meetings complete
+  Backfilled:          22 days
+  Meeting records:     54
+  Adjusted existing:   1
+  Skipped:             1 day no meetings, 1 already covered
+  Total meeting time:  40h 0m
+```
+
+## Safety guarantees
+- Only real meetings from your calendar are logged. Nothing is fabricated.
+- Existing Tempo entries are never deleted.
+- Meeting durations are never shortened - they're authoritative.
+- Existing **non-meeting** entries can be moved or shortened (in 30-minute steps) to make room for meetings or to keep the day at or below 8h.
 - Every record is at least 30 minutes.
-- Meeting durations are never trimmed.
-- Existing non-meeting records can be moved or shortened to make room for meetings.
-- The final day is kept at or below 8h total logged time when safely possible.
-- Already-covered meetings are skipped.
 - Weekends and today are skipped.
+- Errors on individual API calls don't stop the run - the day is marked partial and the rest continues.
