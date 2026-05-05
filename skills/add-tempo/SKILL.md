@@ -197,26 +197,29 @@ This step ensures the day totals exactly 8 hours (480 minutes), counting **every
 
 If `difference == 0`: no adjustment needed, proceed.
 
-Otherwise, adjust **only user-provided work entries** (never meetings, never existing records) in fixed **30-minute steps**, distributed across all entries to preserve their relative proportions:
+Otherwise, adjust **only user-provided work entries** (never meetings, never existing records). The day MUST end at exactly 480 minutes - no exceptions. Bulk adjustment uses **30-minute steps** to preserve proportions; a single trailing **residual** step (any 1–29 minute remainder) closes the gap when meetings or existing records make 30-minute steps incapable of hitting 480 exactly.
 
 ### If `difference > 0` (under 8h - need to add time)
-1. Sort user entries by current duration **descending** (longest first). Ties: keep original input order.
-2. Walk the sorted list and add 30 minutes to each entry, one at a time. After each step, recompute `difference`. Stop when `difference == 0`.
-3. If you reach the end of the list and `difference > 0`, loop back to the longest entry and continue adding 30 minutes per pass. Re-sort between passes only if a smaller entry has overtaken the head; otherwise the original order is fine since every entry grew by the same amount.
+1. Sort user entries by current duration **descending** (longest first). Ties: keep original input order. Call this the **walk order**.
+2. Walk the sorted list and add 30 minutes to each entry, one at a time. After each step, recompute `difference`. Stop when `difference < 30` (the next +30 step would overshoot, or `difference == 0`).
+3. If you reach the end of the list and `difference >= 30`, loop back to the longest entry and continue adding 30 minutes per pass. Re-sort between passes only if a smaller entry has overtaken the head; otherwise the original order is fine since every entry grew by the same amount.
 4. Always start each new pass from the longest entry so proportions are preserved.
+5. **Residual fill:** if `0 < difference < 30` after step 2/3 (e.g., a 45-minute meeting leaves 15 minutes ungrown), add the full `difference` to the NEXT entry in the walk order (the entry that would have received the next +30). This is the ONLY non-30 adjustment allowed and brings `difference` to exactly 0. Print this step distinctly, e.g.: `🔧 Residual fill: AB-1234 +15m to close 8h gap.`
 
 ### If `difference < 0` (over 8h - need to subtract time)
 1. Sort user entries by current duration **descending** (longest first).
-2. Walk the sorted list and subtract 30 minutes from each entry, one at a time. After each step, recompute `difference`. Stop when `difference == 0`.
+2. Walk the sorted list and subtract 30 minutes from each entry, one at a time. After each step, recompute `difference`. Stop when `difference > -30` (the next -30 step would undershoot, or `difference == 0`).
 3. **Never shrink an entry below 30 minutes.** Skip any entry already at 30 minutes and move to the next.
-4. If a full pass over the list cannot subtract any further (every entry is at the 30-minute floor) and `difference` is still negative, stop adjusting and print a warning that the day still exceeds 8h - do not delete entries.
-5. Loop back to the longest entry between passes, same as the grow case, so the largest entries shed time first and proportions are preserved.
+4. Loop back to the longest entry between passes, same as the grow case, so the largest entries shed time first and proportions are preserved.
+5. **Residual fill:** if `-30 < difference < 0` after step 2/3, subtract `|difference|` from the next entry in the walk order that can absorb it without dropping below 30 minutes. This is the ONLY non-30 adjustment allowed and brings `difference` to exactly 0. If no entry can absorb the residual without floor violation, walk forward seeking one that can. Print: `🔧 Residual trim: AB-1234 -15m to close 8h gap.`
+6. If a full pass cannot subtract any further (every entry is at the 30-minute floor) AND no entry can absorb the residual, stop adjusting and print a warning that the day still exceeds 8h - do not delete entries.
 
 ### Common rules
-- All adjustments are in 30-minute increments. No partial steps.
+- Bulk adjustments are 30-minute increments. Exactly one residual step (1–29 min) is allowed at the end to close the gap when 30-min steps cannot hit 480 exactly.
 - Never adjust meeting durations - only user-provided work entries.
 - Never modify existing records - they are read-only for this skill.
 - Print every change, e.g.: `🔧 Adjusted AB-1234 "code changes" from 4h 0m → 4h 30m to fill 8h day.`
+- The day MUST hit 480 minutes after Step 7 unless the floor-constraint hard-stop in shrink-rule 6 fires.
 
 If `existing_total + meeting_total` already exceeds 480 minutes, do not shrink user entries below their original size to compensate - print a warning that the day is already over 8h before any user input and proceed with the user's original durations.
 

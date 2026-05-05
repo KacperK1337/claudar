@@ -30,9 +30,10 @@ Combined with two calendar meetings (a 30-minute daily and a 1-hour planning cal
 The original entries totalled 4h 30m of work plus 1h 30m of meetings = 6h, leaving a 2h gap.
 The skill walked the entries longest-first - bugfixes (3h) → coding (1h) → PR review (30m) - adding 30m per step and looping back to the top, until the day hit 8h.
 
-The 8-hour total is reached automatically.
+The 8-hour total is reached automatically - always exactly 8h, no exceptions.
 If your entries (plus meetings and anything already on the day) don't add up to 8h, the skill grows or shrinks your work entries in **30-minute steps**, starting from the longest entry and walking down to the shortest, until the day balances.
 Looping back to the top each pass keeps the original proportions roughly intact.
+If a leftover gap of less than 30 minutes remains (for example because a 45-minute meeting breaks the 30-minute grid), the skill applies one final **residual** adjustment to the next entry in the walk order - the only non-30 step allowed - so the day always lands on exactly 480 minutes.
 Meetings and existing entries are never touched, and no entry is ever shrunk below 30 minutes.
 
 ## Setup
@@ -94,7 +95,7 @@ Notes on the input format:
 1. The skill reads your Outlook calendar for the target day, your existing Tempo entries for that day, and looks up the internal IDs for every ticket you mentioned - all in parallel.
 2. **Meetings**: every real work meeting on the calendar gets a planned entry under your meeting ticket. Lunches, gym, declined meetings, and anything cancelled are skipped. Meetings that already exist as Tempo entries are not duplicated.
 3. **Your work entries**: parsed from your one-liner, in order.
-4. **The 8-hour rule**: existing entries + new meetings + your work entries should equal 8 hours. If the day is short, the skill adds 30 minutes to your work entries one at a time, starting with the longest and cycling back to the top until the day hits 8h. If the day is over, it subtracts 30 minutes the same way (longest first, never below 30 minutes). Meetings and existing entries are never touched.
+4. **The 8-hour rule**: existing entries + new meetings + your work entries always equal exactly 8 hours. If the day is short, the skill adds 30 minutes to your work entries one at a time, starting with the longest and cycling back to the top until the next +30 would overshoot. If the day is over, it subtracts 30 minutes the same way (longest first, never below 30 minutes). Any leftover gap of less than 30 minutes (e.g. from a 45-minute meeting) is closed by a single non-30 residual step on the next entry in the walk order, so the day always lands on 480 minutes exactly. Meetings and existing entries are never touched.
 5. **Scheduling**: the day is laid out starting at 09:00. Each work entry is placed in the next gap that fits it whole - entries are never split across meetings. Existing entries on the day are treated as immovable, just like meetings.
 6. **Posting**: every new record (meetings + work entries) is sent to Tempo in one parallel batch. Existing entries are never re-posted, modified, or deleted.
 7. You get a final table showing every record on the day, marking which ones are new vs already there.
