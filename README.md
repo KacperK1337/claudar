@@ -19,6 +19,13 @@ then it will copy the skill to `~/.claude/skills/` so it's available globally.
 Skill installation already covers upgrading - 
 if you run the installation script for a skill that is already installed, it will be updated with new changes.
 
+You can also update all your already installed skills at once, using below script:
+```bash
+./update-all.sh
+```
+The script scans `skills/` in this repo, detects which of them are already present in your `~/.claude/skills/` directory, and runs `./install.sh <skill-name>` for each. 
+Skills you never installed or the ones coming outside this repo are left alone.
+
 ## Uninstalling
 Remove the skill directory from `~/.claude/skills/`:
 ```bash
