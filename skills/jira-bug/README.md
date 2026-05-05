@@ -39,7 +39,8 @@ You can sharpen the output by adding context after the command:
 ```
 
 ## Setup
-No external tools or environment variables needed. The skill works entirely off the current Claude Code conversation.
+No external tools or environment variables needed.
+The skill works entirely off the current Claude Code conversation.
 
 ## Installation
 ```bash
@@ -52,7 +53,8 @@ Basic shape:
 /jira-bug [additional context]
 ```
 
-The argument is optional. Anything you type after `/jira-bug` becomes guidance for shaping the ticket - audience, emphasis, level of detail.
+The argument is optional.
+Anything you type after `/jira-bug` becomes guidance for shaping the ticket - audience, emphasis, level of detail.
 
 Multiline context works too:
 ```text

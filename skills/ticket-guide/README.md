@@ -3,7 +3,8 @@ Turn a Jira ticket into a concrete implementation plan grounded in your actual c
 
 ## Why use it
 Most Jira tickets describe **what** needs to happen, not **how**. 
-Before you can start, you have to read the ticket, hunt through the repo for the right place to make the change, figure out which patterns the codebase already uses, and decide where to add tests. This skill does all of that for you and hands you a step-by-step plan referencing real files and real functions.
+Before you can start, you have to read the ticket, hunt through the repo for the right place to make the change, figure out which patterns the codebase already uses, and decide where to add tests.
+This skill does all of that for you and hands you a step-by-step plan referencing real files and real functions.
 
 The goal: when you finish implementing the guide, the PR sails through review with zero comments.
 
@@ -72,7 +73,8 @@ Basic shape:
 /ticket-guide <ticket-key> [additional context]
 ```
 
-The first argument is the Jira key (e.g. `ABC-4221`). Everything after it is optional steering for the plan.
+The first argument is the Jira key (e.g. `ABC-4221`).
+Everything after it is optional steering for the plan.
 
 Examples:
 ```text

@@ -57,7 +57,8 @@ Basic shape:
 /pr-review <pr-number|branch-name|HEAD> [additional context]
 ```
 
-The first argument picks the PR. Everything after it is optional steering for the review.
+The first argument picks the PR.
+Everything after it is optional steering for the review.
 
 Examples:
 ```text

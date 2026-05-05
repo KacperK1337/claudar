@@ -5,7 +5,8 @@ Backfill missed Tempo entries for **past calendar meetings**, in bulk.
 If you forgot to log time for a week (or a month), opening Tempo and clicking through every meeting one by one is painful. 
 This skill reads your Outlook calendar, finds every real meeting on every workday since the date you give it, and creates the matching Tempo entries under one ticket.
 
-It does **not** invent any work. It only logs meetings that actually happened on your calendar.
+It does **not** invent any work.
+It only logs meetings that actually happened on your calendar.
 
 ## Quick example
 ```text
@@ -61,7 +62,8 @@ How to get each one:
 /fill-tempo-meetings 3 weeks ago
 ```
 
-The date you pass is the **starting** day. The skill walks forward from there, one workday at a time, up to **yesterday**. 
+The date you pass is the **starting** day.
+The skill walks forward from there, one workday at a time, up to **yesterday**.
 Today is never touched (the day isn't over yet).
 
 The date is forgiving:

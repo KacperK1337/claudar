@@ -5,7 +5,8 @@ Log a single workday to Tempo: your calendar meetings + the work you actually di
 At the end of the day, opening Tempo and creating an entry for every meeting and every task you worked on is slow and easy to forget. 
 This skill takes a one-liner - a list of tickets and how long you spent on each - combines it with the meetings on your calendar, and posts the whole 8-hour day to Tempo in one go.
 
-You write what you worked on. The skill handles the meetings, the math (filling to 8h), and the scheduling (no overlaps, no double-bookings).
+You write what you worked on.
+The skill handles the meetings, the math (filling to 8h), and the scheduling (no overlaps, no double-bookings).
 
 ## Quick example
 ```text
