@@ -18,4 +18,4 @@ about: Report a bug, safety concern, or request a feature
 <!-- Describe exact steps to achieve the issue, skip if not applicable -->
 
 ## Additional context
-<!-- Anything else — logs, screenshots, environment details, related issues, your opinion -->
+<!-- Anything else - logs, screenshots, environment details, related issues, your opinion -->

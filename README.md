@@ -16,7 +16,7 @@ The script will check if required tools for selected skill are installed,
 then it will copy the skill to `~/.claude/skills/` so it's available globally.
 
 ## Upgrading
-Skill installation already covers upgrading — 
+Skill installation already covers upgrading - 
 if you run the installation script for a skill that is already installed, it will be updated with new changes.
 
 ## Uninstalling
@@ -27,9 +27,9 @@ rm -rf ~/.claude/skills/<skill-name>
 
 ## Contributing
 To add a skill create a directory with the name for it under [skills](skills) with:
-- `SKILL.md` — the skill definition (see [Claude Code docs](https://docs.anthropic.com/en/docs/claude-code) for correct format)
-- `requirements.txt` — one CLI tool per line that must be available for the skill to work (leave empty if there are none)
-- `README.md` — description of the skill, its requirements, usage, examples, what it does (see existing skills for examples)
+- `SKILL.md` - the skill definition (see [Claude Code docs](https://docs.anthropic.com/en/docs/claude-code) for correct format)
+- `requirements.txt` - one CLI tool per line that must be available for the skill to work (leave empty if there are none)
+- `README.md` - description of the skill, its requirements, usage, examples, what it does (see existing skills for examples)
 
 Remember to verify your skill before submitting any changes.
 

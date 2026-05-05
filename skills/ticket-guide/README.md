@@ -38,6 +38,6 @@ there is already a partial implementation in branch feat/old-spike
 2. Parses the first argument as the Jira ticket key and treats everything after it as optional additional implementation context
 3. Analyzes the current codebase on the default branch for relevant patterns, conventions, and existing code
 4. Produces a structured implementation guide covering: step-by-step plan, files to modify, patterns to follow, testing strategy, gotchas, and a self-review checklist
-5. Grounds every suggestion in actual code from the repo — no generic advice
+5. Grounds every suggestion in actual code from the repo - no generic advice
 
 The guide targets PR-ready quality: the resulting implementation should pass review from the most senior engineer on the team with zero comments.

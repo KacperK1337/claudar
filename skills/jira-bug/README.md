@@ -37,4 +37,4 @@ call out that the root cause is still unconfirmed if needed
 3. Uses any additional context provided with the command to shape emphasis, wording, or level of detail
 4. Outputs a structured bug ticket ready to paste into Jira
 
-The output covers: summary, root cause, steps to reproduce, expected behavior, and acceptance criteria — all based strictly on what was discussed in the conversation.
+The output covers: summary, root cause, steps to reproduce, expected behavior, and acceptance criteria - all based strictly on what was discussed in the conversation.

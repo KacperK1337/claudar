@@ -26,13 +26,13 @@ Before producing the ticket, briefly summarize any additional context provided. 
 
 Review the entire conversation history and extract:
 
-1. **The problem** — what was broken, failing, or behaving unexpectedly.
-2. **Root cause** — what was identified as the underlying issue (if found).
-3. **Affected area** — which files, modules, services, or features are involved.
-4. **Steps to reproduce** — how the user encountered or triggered the bug, based on what they described.
-5. **Solution applied** — what fix was discussed or implemented (if any).
+1. **The problem** - what was broken, failing, or behaving unexpectedly.
+2. **Root cause** - what was identified as the underlying issue (if found).
+3. **Affected area** - which files, modules, services, or features are involved.
+4. **Steps to reproduce** - how the user encountered or triggered the bug, based on what they described.
+5. **Solution applied** - what fix was discussed or implemented (if any).
 
-If any of these are unclear or not present in the conversation, note them as "Unknown" or "N/A" — do not fabricate details.
+If any of these are unclear or not present in the conversation, note them as "Unknown" or "N/A" - do not fabricate details.
 
 Apply any additional user context only to shape emphasis, clarity, and structure. Do not let it override the factual record of the conversation.
 
@@ -42,7 +42,7 @@ Output the ticket in the following format. Use plain text suitable for pasting d
 
 ```text
 ## Title
-<concise, specific title — what's broken and where, max ~80 chars>
+<concise, specific title - what's broken and where, max ~80 chars>
 
 ## Description
 
@@ -53,7 +53,7 @@ Output the ticket in the following format. Use plain text suitable for pasting d
 <brief explanation of why it happens, if identified in the conversation>
 
 ### Steps to Reproduce
-<numbered list of steps to trigger the issue — be specific>
+<numbered list of steps to trigger the issue - be specific>
 
 ### Expected Behavior
 <what should happen>
@@ -66,7 +66,7 @@ Output the ticket in the following format. Use plain text suitable for pasting d
 
 ## Rules
 
-- Be specific and factual. Every detail must come from the conversation — do not invent scenarios or assume details not discussed.
+- Be specific and factual. Every detail must come from the conversation - do not invent scenarios or assume details not discussed.
 - Keep the title short and scannable. Lead with the symptom, not the cause. Example: "Login fails with 500 when email contains '+'" not "Fix regex in auth service".
 - Write for someone who was NOT in this conversation. They should understand the bug without additional context.
 - If the conversation didn't cover reproduction steps clearly, write what you can infer and mark gaps with "[needs verification]".

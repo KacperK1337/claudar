@@ -39,7 +39,7 @@ One arg: a start date the user typed in any reasonable form. Normalize it to `YY
 |-------------------------|--------------------------------------------------------------------------|
 | `2026-04-01`            | `2026-04-01`                                                             |
 | `april 1` / `apr 1`     | April 1st of the **current year**                                        |
-| `1 april` / `01.04`     | Same — April 1st of the current year                                     |
+| `1 april` / `01.04`     | Same - April 1st of the current year                                     |
 | `april 2026`            | **April 1st**, 2026 (missing day → 1st)                                  |
 | `january`               | January 1st of the current year (missing day → 1st, missing year → now)  |
 | `2026`                  | January 1st, 2026                                                        |
@@ -52,12 +52,12 @@ Rules:
 - If only a year is given → month and day default to **January 1st**.
 - If only month + day → year defaults to the **current year**; if that date is in the future, fall back to **last year**.
 - If the resolved date is today or later, print `Start date must be before today.` and stop.
-- If parsing fails, print `Usage: /fill-tempo-meetings <date> — examples: /fill-tempo-meetings 2026-04-01, /fill-tempo-meetings "april 1", /fill-tempo-meetings "january 2026"` and stop.
+- If parsing fails, print `Usage: /fill-tempo-meetings <date> - examples: /fill-tempo-meetings 2026-04-01, /fill-tempo-meetings "april 1", /fill-tempo-meetings "january 2026"` and stop.
 
-After normalization, build the workday list (Mon–Fri only) from the start date through **yesterday**, inclusive. Never include today — today's hours aren't done yet, so this skill must not touch them.
+After normalization, build the workday list (Mon–Fri only) from the start date through **yesterday**, inclusive. Never include today - today's hours aren't done yet, so this skill must not touch them.
 
 ## Step 2: Fetch all setup data in parallel
-Steps 2a–2d are independent. Fire all four requests concurrently (background `&` + `wait`, or async client) — do not run them serially.
+Steps 2a–2d are independent. Fire all four requests concurrently (background `&` + `wait`, or async client) - do not run them serially.
 
 2a. Tempo worker ID:
 ```bash
@@ -85,7 +85,7 @@ Note: 2d depends on the worker ID from 2a. To keep parallelism, either (a) run 2
 - Parse meeting issue ID; fail fast if empty/null.
 - Group worklogs by `startDate`. Per date compute total logged seconds, logged issue IDs, occupied windows (`startTime` + duration), and the **full payload fields needed for later PUT calls** (`issue.id`, `startDate`, `startTime`, `description`, `author.accountId`, `tempoWorklogId`, `timeSpentSeconds`).
 
-Reuse this in-memory worklog snapshot for all downstream logic. **Do not re-GET individual worklogs before PUT** — the Step 2d response has every field needed for the update body.
+Reuse this in-memory worklog snapshot for all downstream logic. **Do not re-GET individual worklogs before PUT** - the Step 2d response has every field needed for the update body.
 
 Use existing worklogs to detect already-logged meetings, occupied windows, and total daily time. Existing meeting worklogs on `TEMPO_MEETING_TICKET` may cover meetings and should prevent duplicates. Existing non-meeting worklogs are movable/resizable when they conflict with valid meetings or when the day would exceed 8h after adding meetings.
 
@@ -105,7 +105,7 @@ From `/tmp/outlook_calendar.ics`, extract `VEVENT`s occurring on the target date
 Skip the event if any of these are true:
 - `STATUS:CANCELLED`.
 - Enclosing `METHOD:CANCEL`.
-- `SUMMARY` starts with `Canceled:` or `Cancelled:` (case-insensitive) — Outlook flags some cancellations only via the summary prefix, not `STATUS`.
+- `SUMMARY` starts with `Canceled:` or `Cancelled:` (case-insensitive) - Outlook flags some cancellations only via the summary prefix, not `STATUS`.
 - The user's own `ATTENDEE` line has `PARTSTAT=DECLINED`.
 - It is an all-day event (`DATE`-only `DTSTART`).
 - It has no reliable start or end time.
@@ -159,19 +159,19 @@ Every Tempo record must be at least 30 minutes.
 
 ## Step 8: Process each date chronologically
 
-### 8a — Weekends
+### 8a - Weekends
 Weekends are not in the workday list. If encountered defensively:
 ```text
-⏭️ <DATE> — weekend, skipping.
+⏭️ <DATE> - weekend, skipping.
 ```
 
-### 8b — No valid meetings
+### 8b - No valid meetings
 If no valid meetings remain after duplicate detection:
 ```text
-⏭️ <DATE> (<Day>) — no meetings to log.
+⏭️ <DATE> (<Day>) - no meetings to log.
 ```
 
-### 8c — Adjust existing non-meeting worklogs
+### 8c - Adjust existing non-meeting worklogs
 Before posting new meeting logs, update existing non-meeting records that conflict with selected meeting windows or push the day over 8h.
 
 For moved records:
@@ -184,9 +184,9 @@ For shortened records:
 - Keep at least 30 minutes.
 - Never shorten records on `TEMPO_MEETING_TICKET`.
 
-Use Tempo's worklog update endpoint (`PUT /4/worklogs/{tempoWorklogId}`) for each changed record. Build the PUT body **directly from the Step 2d snapshot** — do not issue a fresh GET per worklog. If an update fails, do not post a meeting into an overlapping slot; mark the day partial and continue.
+Use Tempo's worklog update endpoint (`PUT /4/worklogs/{tempoWorklogId}`) for each changed record. Build the PUT body **directly from the Step 2d snapshot** - do not issue a fresh GET per worklog. If an update fails, do not post a meeting into an overlapping slot; mark the day partial and continue.
 
-### 8d — Build meeting worklogs
+### 8d - Build meeting worklogs
 Each meeting becomes exactly one Tempo worklog:
 - `issueId`: `TEMPO_MEETING_ISSUE_ID`
 - `startDate`: target date
@@ -195,8 +195,8 @@ Each meeting becomes exactly one Tempo worklog:
 - `description`: meeting summary, or `Meeting` if summary is blank
 - `authorAccountId` / worker field: `TEMPO_WORKER_ID`, according to Tempo API requirements
 
-### 8e — Post all worklogs in one parallel batch
-Tempo has no bulk API. After all per-day plans (adjustments + new meeting POSTs) are computed, fire the entire batch concurrently across **all dates at once** — do not serialize per record and do not wait between days.
+### 8e - Post all worklogs in one parallel batch
+Tempo has no bulk API. After all per-day plans (adjustments + new meeting POSTs) are computed, fire the entire batch concurrently across **all dates at once** - do not serialize per record and do not wait between days.
 
 ```bash
 # adjustments first (PUTs), then meeting creates (POSTs), all in parallel
@@ -216,12 +216,12 @@ wait
 ```
 Capture each response to a file (or array) keyed by record ID/index so per-day results can be aggregated after `wait`. If a PUT (adjustment) fails for a date, drop the meeting that needed that adjustment, mark the day partial, and continue. If a POST fails, mark only that meeting failed; do not retry inside the run.
 
-Equivalent in a single Python script: use `asyncio` + `aiohttp` or `concurrent.futures.ThreadPoolExecutor(max_workers=16)` and submit every adjustment + meeting at once. **Do not call `subprocess.run(['curl', ...])` in a serial Python loop** — that defeats parallelism.
+Equivalent in a single Python script: use `asyncio` + `aiohttp` or `concurrent.futures.ThreadPoolExecutor(max_workers=16)` and submit every adjustment + meeting at once. **Do not call `subprocess.run(['curl', ...])` in a serial Python loop** - that defeats parallelism.
 
-### 8f — One-line day result
+### 8f - One-line day result
 ```text
-✅ <DATE> (<Day>) — <N> meeting records, <H>h <M>m logged, <A> existing records adjusted.
-⚠️ <DATE> (<Day>) — partial, <H>h <M>m logged (<reason>).
+✅ <DATE> (<Day>) - <N> meeting records, <H>h <M>m logged, <A> existing records adjusted.
+⚠️ <DATE> (<Day>) - partial, <H>h <M>m logged (<reason>).
 ```
 
 ## Step 9: Grand summary
@@ -253,7 +253,7 @@ Include: backfilled days, meeting records created, existing records adjusted, we
 - Skip meetings the user declined (`PARTSTAT=DECLINED`).
 - Skip all-day events.
 - Skip weekends.
-- Never log today — date range stops at yesterday in the user's local timezone.
+- Never log today - date range stops at yesterday in the user's local timezone.
 - Continue past API errors.
 - Use the user's local timezone for all date and time comparisons.
 

@@ -35,7 +35,7 @@ ignore cosmetic naming nits unless they affect clarity
 Using `HEAD` will review the PR associated with whatever branch you're currently checked out on. If no open PR exists for the current branch, it will throw an error.
 
 For the best review results, make sure you're locally checked out on the latest version of either the source or target branch of the PR you want to review.
-The skill reads full file contents from your local working tree for context — if your local files are outdated, the review may reference stale code.
+The skill reads full file contents from your local working tree for context - if your local files are outdated, the review may reference stale code.
 
 ## What it does
 1. Fetches PR metadata and diff via `gh` CLI
@@ -45,4 +45,4 @@ The skill reads full file contents from your local working tree for context — 
 5. Produces a structured review covering: correctness, security, performance, architecture, code reuse, testing, naming, API design, and dependencies
 6. Gives a verdict: `REJECT` / `CHANGES REQUESTED` / `APPROVE WITH NITS` / `APPROVE`
 
-The review is harsh by design — it simulates a senior staff engineer who knows the codebase and won't let anything slide.
+The review is harsh by design - it simulates a senior staff engineer who knows the codebase and won't let anything slide.
