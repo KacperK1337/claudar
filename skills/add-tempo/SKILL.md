@@ -197,11 +197,26 @@ This step ensures the day totals exactly 8 hours (480 minutes), counting **every
 
 If `difference == 0`: no adjustment needed, proceed.
 
-If `difference != 0` (under or over 8 hours): adjust the user-provided entry durations to compensate. Use your best judgment to decide which entries to grow or shrink - consider the context, descriptions, and relative sizes. You might add time to one entry or spread it across several, whatever makes the most sense for that particular day.
-- Never shrink any entry below 30 minutes.
+Otherwise, adjust **only user-provided work entries** (never meetings, never existing records) in fixed **30-minute steps**, distributed across all entries to preserve their relative proportions:
+
+### If `difference > 0` (under 8h - need to add time)
+1. Sort user entries by current duration **descending** (longest first). Ties: keep original input order.
+2. Walk the sorted list and add 30 minutes to each entry, one at a time. After each step, recompute `difference`. Stop when `difference == 0`.
+3. If you reach the end of the list and `difference > 0`, loop back to the longest entry and continue adding 30 minutes per pass. Re-sort between passes only if a smaller entry has overtaken the head; otherwise the original order is fine since every entry grew by the same amount.
+4. Always start each new pass from the longest entry so proportions are preserved.
+
+### If `difference < 0` (over 8h - need to subtract time)
+1. Sort user entries by current duration **descending** (longest first).
+2. Walk the sorted list and subtract 30 minutes from each entry, one at a time. After each step, recompute `difference`. Stop when `difference == 0`.
+3. **Never shrink an entry below 30 minutes.** Skip any entry already at 30 minutes and move to the next.
+4. If a full pass over the list cannot subtract any further (every entry is at the 30-minute floor) and `difference` is still negative, stop adjusting and print a warning that the day still exceeds 8h - do not delete entries.
+5. Loop back to the longest entry between passes, same as the grow case, so the largest entries shed time first and proportions are preserved.
+
+### Common rules
+- All adjustments are in 30-minute increments. No partial steps.
 - Never adjust meeting durations - only user-provided work entries.
 - Never modify existing records - they are read-only for this skill.
-- Print what you adjusted, e.g.: `🔧 Adjusted AB-1234 "code changes" from 4h 0m → 4h 30m to fill 8h day.`
+- Print every change, e.g.: `🔧 Adjusted AB-1234 "code changes" from 4h 0m → 4h 30m to fill 8h day.`
 
 If `existing_total + meeting_total` already exceeds 480 minutes, do not shrink user entries below their original size to compensate - print a warning that the day is already over 8h before any user input and proceed with the user's original durations.
 

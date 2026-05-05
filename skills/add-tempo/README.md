@@ -18,17 +18,22 @@ Combined with two calendar meetings (a 30-minute daily and a 1-hour planning cal
 📋 Tempo Log for 2026-05-05
 ─────────────────────────────────────────────
   Time        │ Ticket   │ Duration │ Description
-  09:00-10:00 │ AB-1234  │ 1h 0m    │ coding
-  10:00-10:30 │ AB-9999  │ 0h 30m   │ PR review
-  10:30-11:00 │ AB-1234  │ 0h 30m   │ Daily Standup
-  11:00-12:00 │ AB-1234  │ 1h 0m    │ Planning
-  12:00-15:00 │ AB-5555  │ 3h 0m    │ bugfixes
-  15:00-17:00 │ AB-1234  │ 2h 0m    │ coding (extended to fill 8h)
+  09:00-10:30 │ AB-1234  │ 1h 30m   │ coding (grown +30m)
+  10:30-11:30 │ AB-9999  │ 1h 0m    │ PR review (grown +30m)
+  11:30-12:00 │ AB-1234  │ 0h 30m   │ Daily Standup
+  12:00-13:00 │ AB-1234  │ 1h 0m    │ Planning
+  13:00-17:00 │ AB-5555  │ 4h 0m    │ bugfixes (grown +1h)
 ─────────────────────────────────────────────
   Total: 8h 0m / 8h 0m  ✅
 ```
 
-The 8-hour total is reached automatically - if your entries don't add up to 8h after meetings, the skill stretches or trims your work entries (never the meetings) to make it fit.
+The original entries totalled 4h 30m of work plus 1h 30m of meetings = 6h, leaving a 2h gap.
+The skill walked the entries longest-first - bugfixes (3h) → coding (1h) → PR review (30m) - adding 30m per step and looping back to the top, until the day hit 8h.
+
+The 8-hour total is reached automatically.
+If your entries (plus meetings and anything already on the day) don't add up to 8h, the skill grows or shrinks your work entries in **30-minute steps**, starting from the longest entry and walking down to the shortest, until the day balances.
+Looping back to the top each pass keeps the original proportions roughly intact.
+Meetings and existing entries are never touched, and no entry is ever shrunk below 30 minutes.
 
 ## Setup
 You need `curl` and `jq` on your machine, plus the following environment variables exported in your shell:
@@ -89,7 +94,7 @@ Notes on the input format:
 1. The skill reads your Outlook calendar for the target day, your existing Tempo entries for that day, and looks up the internal IDs for every ticket you mentioned - all in parallel.
 2. **Meetings**: every real work meeting on the calendar gets a planned entry under your meeting ticket. Lunches, gym, declined meetings, and anything cancelled are skipped. Meetings that already exist as Tempo entries are not duplicated.
 3. **Your work entries**: parsed from your one-liner, in order.
-4. **The 8-hour rule**: existing entries + new meetings + your work entries should equal 8 hours. If they don't, your work entries are stretched or shrunk (smartly, not below 30 minutes each) to hit the target. Meetings and existing entries are never touched.
+4. **The 8-hour rule**: existing entries + new meetings + your work entries should equal 8 hours. If the day is short, the skill adds 30 minutes to your work entries one at a time, starting with the longest and cycling back to the top until the day hits 8h. If the day is over, it subtracts 30 minutes the same way (longest first, never below 30 minutes). Meetings and existing entries are never touched.
 5. **Scheduling**: the day is laid out starting at 09:00. Each work entry is placed in the next gap that fits it whole - entries are never split across meetings. Existing entries on the day are treated as immovable, just like meetings.
 6. **Posting**: every new record (meetings + work entries) is sent to Tempo in one parallel batch. Existing entries are never re-posted, modified, or deleted.
 7. You get a final table showing every record on the day, marking which ones are new vs already there.
