@@ -38,8 +38,8 @@ if [[ ${#updated[@]} -eq 0 && ${#failed[@]} -eq 0 ]]; then
   exit 0
 fi
 
-echo "Updated: ${#updated[@]} skill(s)${updated[*]:+: ${updated[*]}}"
+echo "Done, updated ${#updated[@]} skill(s)."
 if [[ ${#failed[@]} -gt 0 ]]; then
-  echo "Failed: ${#failed[@]} skill(s): ${failed[*]}"
+  echo "Failed to update ${#failed[@]} skill(s): ${failed[*]}"
   exit 1
 fi
