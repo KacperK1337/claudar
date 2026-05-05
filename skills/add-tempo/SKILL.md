@@ -58,22 +58,48 @@ echo "Resolved worker ID: ${TEMPO_WORKER_ID}"
 
 ## Step 2: Determine the target date
 
-Use today's date (local timezone):
-```bash
-date +%Y-%m-%d
-```
+The user may optionally prefix `$ARGUMENTS` with a date. Anything before the first ticket key (regex `[A-Z]+-\d+`) is the date string; everything from the first ticket onward is the work-entry list parsed in Step 6.
 
-## Step 3: Fetch calendar meetings for today
+Resolution rules:
+- No date prefix → `TARGET_DATE` is **today** in local timezone (`date +%Y-%m-%d`).
+- Date prefix present → normalize it to `YYYY-MM-DD` using the current local date for missing parts.
+
+Accept the same flexible forms as the sibling `fill-tempo-meetings` skill:
+
+| User input                  | Resolves to                                                              |
+|-----------------------------|--------------------------------------------------------------------------|
+| `2026-04-01`                | `2026-04-01`                                                             |
+| `today` / `yesterday`       | Local date today / yesterday                                             |
+| `april 1` / `apr 1`         | April 1st of the current year                                            |
+| `1 april` / `01.04`         | April 1st of the current year                                            |
+| `april 2026`                | April 1st, 2026 (missing day → 1st)                                      |
+| `04/01/2026`                | `YYYY-MM-DD` if year first; otherwise `DD/MM/YYYY` (EU)                  |
+| `last monday`, `3 days ago` | Resolve relative to today                                                |
+
+Rules:
+- Case-insensitive; trim whitespace; accept `-`, `/`, `.`, or spaces as separators.
+- Month-only → day defaults to 1. Year-only → January 1st.
+- Month + day with no year → current year; if that lands in the future, fall back to last year.
+- If parsing fails, print `Usage: /add-tempo [date] <TICKET> <DURATION> [DESC], ... — examples: /add-tempo AB-1 1h, /add-tempo 2026-04-01 AB-1 1h, /add-tempo yesterday AB-1 1h coding` and stop.
+
+Argument-split examples:
+- `AB-1234 1 hour` → `TARGET_DATE` = today, entries = `AB-1234 1 hour`
+- `2026-04-01 AB-1234 1 hour` → `TARGET_DATE` = `2026-04-01`, entries = `AB-1234 1 hour`
+- `yesterday AB-1234 1 hour, AB-9999 30 min` → `TARGET_DATE` = yesterday, entries = `AB-1234 1 hour, AB-9999 30 min`
+- `april 1 AB-1234 1 hour` → `TARGET_DATE` = April 1st current year, entries = `AB-1234 1 hour`
+
+Store the resolved date as `TARGET_DATE` and the remaining argument tail as `WORK_ENTRIES_RAW` (used by Step 6).
+
+## Step 3: Fetch calendar meetings for the target date
 
 Outlook calendars can be published as an ICS URL (no OAuth needed).
 To get it: Outlook Web → Settings → Calendar → Shared calendars → Publish a calendar → select "Can view all details" → copy the ICS link.
 
 ```bash
-TODAY=$(date +%Y-%m-%d)
 curl -s "${OUTLOOK_ICS_URL}" > /tmp/outlook_calendar.ics
 ```
 
-Parse the `.ics` file to extract today's events. Look for `VEVENT` blocks where `DTSTART` falls on today's date (after timezone conversion). Extract at minimum:
+Parse the `.ics` file to extract events for `${TARGET_DATE}`. Look for `VEVENT` blocks where `DTSTART` (after timezone conversion) falls on the target date. Extract at minimum:
 - `SUMMARY` → meeting name
 - `DTSTART` / `DTEND` → start and end times
 - `STATUS`
@@ -81,7 +107,7 @@ Parse the `.ics` file to extract today's events. Look for `VEVENT` blocks where 
 - the user's `ATTENDEE;PARTSTAT`, when present
 - `UID`, `RECURRENCE-ID`, `EXDATE`, `RRULE`
 
-**Timezone handling:** `DTSTART`/`DTEND` may be UTC (`Z` suffix), floating, or carry a `TZID=` parameter. Convert to the user's local timezone before comparing against today's date. Use local `HH:MM` for Tempo `startTime`.
+**Timezone handling:** `DTSTART`/`DTEND` may be UTC (`Z` suffix), floating, or carry a `TZID=` parameter. Convert to the user's local timezone before comparing against `${TARGET_DATE}`. Use local `HH:MM` for Tempo `startTime`.
 
 **Recurrence handling:** honor at minimum:
 - `EXDATE` exclusions on recurring series
@@ -102,7 +128,7 @@ Parse each remaining meeting into a list of `{name, startTime, endTime}` objects
 
 ## Step 4: Resolve Jira issue IDs
 
-The Tempo API requires numeric `issueId`, not the ticket key string. Parse `$ARGUMENTS` first (see Step 6) so you know all user tickets, then resolve every unique ticket key (meeting ticket + user-provided tickets) in parallel:
+The Tempo API requires numeric `issueId`, not the ticket key string. Parse `WORK_ENTRIES_RAW` first (see Step 6) so you know all user tickets, then resolve every unique ticket key (meeting ticket + user-provided tickets) in parallel:
 
 ```bash
 for key in "${UNIQUE_TICKET_KEYS[@]}"; do
@@ -126,9 +152,9 @@ Collect all kept meeting time windows as "occupied windows" for scheduling. Sort
 
 ## Step 6: Parse user work entries
 
-The user provided: `$ARGUMENTS`
+Use `WORK_ENTRIES_RAW` from Step 2 (= `$ARGUMENTS` minus the optional date prefix).
 
-Parse the argument string as comma-separated entries in the format: `<TICKET> <DURATION> [DESCRIPTION]`.
+Parse it as comma-separated entries in the format: `<TICKET> <DURATION> [DESCRIPTION]`.
 
 The description is optional — it's everything after the duration. Examples:
 - `AB-1234 1 hour` → ticket AB-1234, 1 hour, description: "Work on AB-1234"
@@ -187,7 +213,7 @@ for record in "${ALL_RECORDS[@]}"; do
     -d '{
       "issueId": <NUMERIC_ISSUE_ID>,
       "timeSpentSeconds": <duration_in_seconds>,
-      "startDate": "<YYYY-MM-DD>",
+      "startDate": "${TARGET_DATE}",
       "startTime": "<HH:MM:SS>",
       "authorAccountId": "<TEMPO_WORKER_ID>",
       "description": "<DESCRIPTION>"
@@ -216,7 +242,7 @@ Sum all logged time (meetings + work entries) in minutes.
 Print a table of ALL records for the day:
 
 ```
-📋 Tempo Log for <DATE>
+📋 Tempo Log for ${TARGET_DATE}
 ─────────────────────────────────────────────
   Time        │ Ticket   │ Duration │ Description
   09:00-10:00 │ AB-1234  │ 1h 0m    │ coding
