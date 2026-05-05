@@ -47,14 +47,11 @@ JIRA_URL="https://${JIRA_ORG}.atlassian.net"
 
 ## Step 1: Resolve the account ID
 
-Fetch the Jira account ID automatically — this is used as the `authorAccountId` in Tempo API calls:
+Fetch the Jira account ID — used as `authorAccountId` in Tempo POSTs. Run this in parallel with Steps 3 (ICS), 4 (ticket IDs), and 4b (existing worklogs) once `TARGET_DATE` is known. Do not let it block other fetches.
 ```bash
-TEMPO_WORKER_ID=$(curl -s -u "${JIRA_EMAIL}:${JIRA_API_TOKEN}" "${JIRA_URL}/rest/api/3/myself" | jq -r '.accountId')
-if [ -z "$TEMPO_WORKER_ID" ] || [ "$TEMPO_WORKER_ID" = "null" ]; then
-  echo "Error: Failed to fetch Jira account ID. Check JIRA_EMAIL, JIRA_API_TOKEN, and JIRA_ORG." && exit 1
-fi
-echo "Resolved worker ID: ${TEMPO_WORKER_ID}"
+curl -s -u "${JIRA_EMAIL}:${JIRA_API_TOKEN}" "${JIRA_URL}/rest/api/3/myself" > /tmp/myself.json &
 ```
+After `wait`, parse `.accountId`. If empty/`null`, print `Error: Failed to fetch Jira account ID. Check JIRA_EMAIL, JIRA_API_TOKEN, and JIRA_ORG.` and exit 1.
 
 ## Step 2: Determine the target date
 
@@ -128,27 +125,45 @@ Parse each remaining meeting into a list of `{name, startTime, endTime}` objects
 
 ## Step 4: Resolve Jira issue IDs
 
-The Tempo API requires numeric `issueId`, not the ticket key string. Parse `WORK_ENTRIES_RAW` first (see Step 6) so you know all user tickets, then resolve every unique ticket key (meeting ticket + user-provided tickets) in parallel:
+The Tempo API requires numeric `issueId`, not the ticket key string. **Parse `WORK_ENTRIES_RAW` first** (see Step 6) so all user ticket keys are known. Then resolve every unique ticket key (meeting ticket + user-provided tickets) **in parallel with Steps 1, 3, and 4b** — all four fetch groups are independent and should run as one concurrent batch:
 
 ```bash
 for key in "${UNIQUE_TICKET_KEYS[@]}"; do
-  curl -s -u "${JIRA_EMAIL}:${JIRA_API_TOKEN}" "${JIRA_URL}/rest/api/3/issue/${key}?fields=id" &
+  curl -s -u "${JIRA_EMAIL}:${JIRA_API_TOKEN}" "${JIRA_URL}/rest/api/3/issue/${key}?fields=id" \
+    > "/tmp/issue_${key}.json" &
 done
-wait
 ```
 
-Cache the mapping (e.g. AB-4518 → 3134591) so you don't fetch the same ticket twice.
-If any ticket is not found (`null` or 404), report the error and stop before Phase B.
+Cache the mapping (e.g. AB-4518 → 3134591) so you don't fetch the same ticket twice. After `wait`, if any ticket is `null`/404, print the error and stop before Phase B.
+
+## Step 4b: Fetch existing Tempo worklogs for the target date
+
+Before planning, fetch every worklog already on `${TARGET_DATE}` so the plan can dedup against meetings already logged and avoid scheduling new entries on top of existing ones. Run this **in the same parallel batch** as Steps 1, 3, and 4:
+
+```bash
+curl -s -H "Authorization: Bearer ${TEMPO_API_TOKEN}" \
+  "https://api.tempo.io/4/worklogs/user/${TEMPO_WORKER_ID}?from=${TARGET_DATE}&to=${TARGET_DATE}&limit=1000" \
+  > /tmp/existing_worklogs.json &
+```
+(`TEMPO_WORKER_ID` here is a placeholder — if Step 1 hasn't returned yet, defer this single curl until `myself.json` resolves.)
+
+After `wait`, group results into:
+- `existing_meeting_records` — `issue.id` matches the resolved `TEMPO_MEETING_ISSUE_ID`. Use these to dedup calendar meetings already logged.
+- `existing_other_records` — every other worklog on the day (user tickets, auto-tracker entries, anything).
+
+Sum their `timeSpentSeconds` into `existing_total_seconds`. Treat each existing record's `[startTime, startTime+duration]` window as **occupied** for scheduling in Step 8 — the planner must not place a new entry on top of a record that already exists, no matter how short.
 
 ## Step 5: Plan meeting records (no POST yet)
 
 For each filtered calendar meeting, build a planned worklog under ticket **`${TEMPO_MEETING_TICKET}`** with the meeting name as the description. Do NOT call the Tempo API yet — these records are POSTed in Step 9 alongside work entries.
 
-Validate each meeting is at least 30 minutes (1800 seconds). If shorter, round UP to 30 minutes.
+**Dedup against `existing_meeting_records` from Step 4b:** if an existing meeting worklog under `TEMPO_MEETING_TICKET` already covers the meeting's time window (overlap > 0), drop the planned meeting — it would be a duplicate. The existing record still counts as an occupied window.
 
-If two meetings overlap, keep the longer one and skip the other (or the more specific work-looking summary if durations match).
+Validate each remaining planned meeting is at least 30 minutes (1800 seconds). If shorter, round UP to 30 minutes. (This rule applies only to records this skill creates — never modify existing records to enforce it.)
 
-Collect all kept meeting time windows as "occupied windows" for scheduling. Sort by start time.
+If two planned meetings overlap, keep the longer one and skip the other (or the more specific work-looking summary if durations match).
+
+Collect all kept meeting time windows **plus all existing-record windows** as "occupied windows" for Step 8. Sort by start time.
 
 ## Step 6: Parse user work entries
 
@@ -173,10 +188,11 @@ Convert each duration to minutes. Validate:
 
 ## Step 7: Auto-adjust durations to fill 8 hours
 
-This step ensures the day always totals exactly 8 hours (480 minutes). Calculate:
-- `meeting_total` = sum of all meeting durations from Step 5
+This step ensures the day totals exactly 8 hours (480 minutes), counting **everything** that will exist on the day after Phase B — existing records included. Calculate:
+- `existing_total` = sum of `timeSpentSeconds` from Step 4b (in minutes)
+- `meeting_total` = sum of all *new* meeting durations planned in Step 5 (post-dedup)
 - `work_total` = sum of all user-provided entry durations from Step 6
-- `grand_total` = meeting_total + work_total
+- `grand_total` = existing_total + meeting_total + work_total
 - `difference` = 480 - grand_total
 
 If `difference == 0`: no adjustment needed, proceed.
@@ -184,7 +200,10 @@ If `difference == 0`: no adjustment needed, proceed.
 If `difference != 0` (under or over 8 hours): adjust the user-provided entry durations to compensate. Use your best judgment to decide which entries to grow or shrink — consider the context, descriptions, and relative sizes. You might add time to one entry or spread it across several, whatever makes the most sense for that particular day.
 - Never shrink any entry below 30 minutes.
 - Never adjust meeting durations — only user-provided work entries.
+- Never modify existing records — they are read-only for this skill.
 - Print what you adjusted, e.g.: `🔧 Adjusted AB-1234 "code changes" from 4h 0m → 4h 30m to fill 8h day.`
+
+If `existing_total + meeting_total` already exceeds 480 minutes, do not shrink user entries below their original size to compensate — print a warning that the day is already over 8h before any user input and proceed with the user's original durations.
 
 This adjustment MUST happen before scheduling (Step 8) so the time windows are calculated correctly.
 
@@ -192,35 +211,34 @@ This adjustment MUST happen before scheduling (Step 8) so the time windows are c
 
 Build the day's schedule starting at **09:00** (9 AM).
 
-1. Collect all occupied windows (meetings from Step 5).
+1. Collect all occupied windows: planned meetings from Step 5 **and every existing record from Step 4b** (existing meeting records and existing other records). All are immovable.
 2. For each user work entry **in order**:
    - Find the next available time slot starting from the current pointer (initially 09:00).
    - If the current pointer falls inside an occupied window, jump the pointer to the end of that window.
-   - If placing the full entry would overlap with an upcoming occupied window, **do NOT split the entry**. Instead, jump the pointer past that meeting and place the entry as a single continuous block after it. Keep checking — if the new position also overlaps with another meeting, keep jumping until you find a gap large enough to fit the entire entry.
+   - If placing the full entry would overlap with an upcoming occupied window, **do NOT split the entry**. Instead, jump the pointer past that occupied window and place the entry as a single continuous block after it. Keep checking — if the new position still overlaps with another occupied window, keep jumping until you find a gap large enough to fit the entire entry.
    - Each user entry MUST be logged as exactly ONE Tempo record. Never split a user entry into multiple records.
-3. Work entries must not overlap with each other or with meetings.
+3. Work entries must not overlap with each other or with any occupied window.
 4. It is OK to have gaps/breaks between records. Records do not need to be back-to-back.
+5. If no gap from 09:00 onward fits the entry, the placement may extend past 17:00 — that is acceptable. Do not shrink the entry to make it fit earlier.
 
 ## Step 9: POST all worklogs to Tempo (parallel)
 
-Now POST every record from the plan — meetings (Step 5) AND work entries (Step 8). Tempo has no bulk endpoint, so fire them in parallel and `wait`:
+Now POST every record from the plan — newly planned meetings (Step 5, post-dedup) AND user work entries (Step 8). **Never re-POST existing records from Step 4b** — they already exist and a re-POST would create duplicates.
+
+Tempo has no bulk endpoint, so fire every record concurrently as a single batch and `wait` once. Capture each response to a separate file/array keyed by record index so per-record success can be aggregated after `wait`.
 
 ```bash
-for record in "${ALL_RECORDS[@]}"; do
+for i in "${!ALL_RECORDS[@]}"; do
   curl -s -X POST "https://api.tempo.io/4/worklogs" \
     -H "Authorization: Bearer ${TEMPO_API_TOKEN}" \
     -H "Content-Type: application/json" \
-    -d '{
-      "issueId": <NUMERIC_ISSUE_ID>,
-      "timeSpentSeconds": <duration_in_seconds>,
-      "startDate": "${TARGET_DATE}",
-      "startTime": "<HH:MM:SS>",
-      "authorAccountId": "<TEMPO_WORKER_ID>",
-      "description": "<DESCRIPTION>"
-    }' &
+    -d "${ALL_RECORDS[$i]}" \
+    > "/tmp/resp_${i}.json" &
 done
 wait
 ```
+
+**Do not** wrap `curl` calls in a serial loop (e.g. Python `subprocess.run([...])` without async/threading) — that defeats the parallelism and makes a 10-record day take 10× longer than a 1-record day. Use `asyncio` + `aiohttp` or `concurrent.futures.ThreadPoolExecutor(max_workers=16)` if implementing in Python.
 
 If a POST returns a non-2xx response, capture and print the response body. After `wait`, if any POST failed, print every failure and exit non-zero — do not retry, do not silently skip.
 
@@ -231,7 +249,7 @@ Print each posted entry as confirmation:
 
 ## Step 10: Validate the 8-hour day
 
-Sum all logged time (meetings + work entries) in minutes.
+Sum all logged time on `${TARGET_DATE}` in minutes — that means existing records (Step 4b) **plus** every record this skill just posted in Step 9.
 
 - If total == 480 minutes (8 hours): print `✅ Day complete — 8h logged.`
 - If total < 480: calculate the gap and print `⚠️ Day incomplete — missing <X>h <Y>m. Add more entries to fill the day.`
@@ -239,7 +257,7 @@ Sum all logged time (meetings + work entries) in minutes.
 
 ## Step 11: Print final summary
 
-Print a table of ALL records for the day:
+Print a table of ALL records for the day — both existing (from Step 4b) and newly posted (from Step 9). Mark each row so the user can tell them apart (e.g. trailing `(existing)` vs `(NEW)`):
 
 ```
 📋 Tempo Log for ${TARGET_DATE}
@@ -258,12 +276,13 @@ Print a table of ALL records for the day:
 
 ## Rules
 
-- Every record MUST be at least 30 minutes. No exceptions.
+- Every **new** record MUST be at least 30 minutes. Existing records on the day are read-only and may be any duration.
 - Every user-provided entry MUST be logged as exactly ONE record. Never split entries into sub-records.
-- The day MUST total exactly 8 hours (480 minutes). Warn the user if it doesn't.
-- Meetings are ALWAYS logged first under `${TEMPO_MEETING_TICKET}`. They take priority over user entries.
+- The day MUST total exactly 8 hours (480 minutes), counting existing records too. Warn the user if it doesn't.
+- Meetings the calendar lists are planned under `${TEMPO_MEETING_TICKET}` — but skip any meeting already covered by an existing meeting worklog on `${TARGET_DATE}` (dedup against Step 4b).
 - Skip non-work calendar events (lunch, breakfast, gym, personal errands, etc.) — do not log them to Tempo.
-- Never double-book a time slot. Meetings are immovable; user entries flex around them.
+- Never double-book a time slot. Existing records and new meetings are immovable; user entries flex around all of them.
+- Never modify or delete existing records — this skill only POSTs new ones.
 - Gaps between records are fine. Records do not need to be perfectly contiguous.
 - If an API call fails, show the error response body and stop. Do not silently skip entries.
 - All times are in the user's local timezone.
