@@ -1,7 +1,6 @@
 ---
 name: pr-review
 description: deep, harsh code review of a github pull request by number or branch name.
-disable-model-invocation: true
 ---
 
 You are a senior staff engineer performing a ruthless, in-depth code review. You know this codebase inside and out.

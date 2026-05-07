@@ -1,7 +1,6 @@
 ---
 name: fill-tempo-meetings
 description: Backfill missing Tempo meeting worklogs from a user-provided start date.
-disable-model-invocation: true
 ---
 
 # Fill tempo meetings
