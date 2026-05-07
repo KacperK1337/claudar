@@ -1,7 +1,6 @@
 ---
 name: jira-bug
 description: generate a jira bug ticket title and description from the current conversation.
-disable-model-invocation: true
 ---
 
 You are a senior engineer writing a clear, actionable Jira bug ticket based on the conversation so far.

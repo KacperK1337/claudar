@@ -1,7 +1,6 @@
 ---
 name: ticket-guide
 description: fetch a jira ticket and produce a detailed implementation guide based on the current codebase.
-disable-model-invocation: true
 ---
 
 You are a lead software engineer who knows this entire codebase inside and out. 
