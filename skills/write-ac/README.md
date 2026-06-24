@@ -4,7 +4,7 @@ Turn any feature context into clear acceptance criteria for QA.
 ## Why use it
 Writing acceptance criteria is easy to skip and hard to do well.
 When you hand a ticket or PR to QA without clear AC, you get back "what exactly should I test?" or bugs caught too late.
-This skill reads any context — a Jira ticket, a GitHub PR, a Confluence page, any URL, free text you type, or the current Claude Code conversation — and distills it into the most important, testable bullet points.
+This skill reads any context — a Jira ticket, a GitHub PR, a Confluence page, any URL, free text you type, the current Claude Code conversation, or any combination of these — and distills it into the most important, testable bullet points.
 QA gets a list they can work from immediately, without having to reverse-engineer intent from code or specs.
 
 ## Quick example
@@ -18,6 +18,18 @@ Or point it at a ticket or PR:
 /write-ac PROJ-123
 /write-ac https://github.com/myorg/myrepo/pull/456
 /write-ac https://mycompany.atlassian.net/browse/PROJ-123
+```
+
+Pass multiple sources together — the skill fetches all of them and merges the context:
+```text
+/write-ac PROJ-123 https://github.com/myorg/myrepo/pull/456
+/write-ac PROJ-123 https://mycompany.atlassian.net/wiki/spaces/ENG/pages/12345678 focus on error states
+```
+
+Add `--repo` to also pull relevant signals (endpoints, routes, flag names) from the connected repository:
+```text
+/write-ac PROJ-123 --repo
+/write-ac PROJ-123 https://github.com/myorg/myrepo/pull/456 --repo focus on mobile behavior
 ```
 
 You get back something like:
@@ -39,7 +51,8 @@ You can add context to sharpen the focus:
 ```
 
 ## Setup
-If you run the skill from inside your app's repository, it automatically scans for relevant API endpoint paths, UI routes, and feature flag names to ground the AC bullets in observable app behavior — no extra setup needed.
+Pass `--repo` (or say "check the repo" / "use the codebase") to have the skill scan for relevant API endpoint paths, UI routes, and feature flag names from the connected repository.
+The skill never reads the repo unless you explicitly ask.
 
 The tools and environment variables you need depend on the input type:
 
@@ -68,11 +81,13 @@ export JIRA_API_TOKEN="your-token"  # create at https://id.atlassian.com/manage-
 ## Usage
 Basic shape:
 ```text
-/write-ac [url-or-ticket-key-or-text] [additional context]
+/write-ac [source ...] [--repo] [additional context]
 ```
 
 The argument is optional.
 When omitted, the skill uses the current Claude Code conversation as the feature context.
+Pass multiple sources (ticket keys, URLs, free text) in any order — they are all fetched and merged.
+Add `--repo` to include signals from the connected repository (only when explicitly passed).
 
 Examples:
 ```text
@@ -84,6 +99,8 @@ Examples:
 /write-ac The checkout flow now supports Apple Pay and Google Pay
 /write-ac PROJ-123 focus on mobile behavior
 /write-ac PROJ-123 audience is a manual QA engineer unfamiliar with the codebase
+/write-ac PROJ-123 https://github.com/myorg/myrepo/pull/456
+/write-ac PROJ-123 --repo focus on error states
 ```
 
 Multiline context works too:
@@ -95,11 +112,12 @@ ignore internal admin flows
 ```
 
 ## What happens when you run it
-1. The skill detects what type of input was provided: URL, Jira ticket key, free text, or nothing.
-2. It fetches the content if a URL or ticket key was given.
-3. If running inside the app repo, it scans for relevant API endpoints, UI routes, and feature flag names to use as anchors for the AC bullets.
-4. It analyzes the content for user-facing behaviors, inputs and outputs, error states, and constraints — described from the user's perspective, not the implementation's.
-5. Any context you passed shapes the scope, focus, or emphasis of the output.
+1. The skill parses all arguments and detects every source: ticket keys, URLs, free text, and whether `--repo` was passed.
+2. It fetches all identified sources in order and merges them into one unified feature context.
+3. If `--repo` was passed and a git repository is found, it scans for relevant API endpoints, UI routes, and feature flag names to use as anchors for the AC bullets.
+   The repo is never consulted otherwise.
+4. It analyzes the merged content for user-facing behaviors, inputs and outputs, error states, and constraints — described from the user's perspective, not the implementation's.
+5. Any free-text context you passed shapes the scope, focus, or emphasis of the output.
 6. It produces 5–10 bullet points written in app-domain language: what the user does, what they see, what the app returns — nothing from the codebase.
 7. Output is plain markdown, ready to paste into Jira, Confluence, a test plan, or a PR description.
 

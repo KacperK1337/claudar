@@ -12,21 +12,29 @@ The raw user input is available as:
 
 `$ARGUMENTS`
 
-Interpret it as follows:
+The user may pass **one or more context sources** in a single invocation, mixed freely.
+Parse `$ARGUMENTS` by scanning all whitespace-delimited tokens and classify each:
 
-- If `$ARGUMENTS` is empty → use the current conversation as context.
-- If the first token of `$ARGUMENTS` matches a Jira ticket key pattern (`[A-Z]+-[0-9]+`) → fetch that ticket (prefer Atlassian MCP if connected, else Jira REST API via curl).
-- If the first token starts with `https://` or `http://`, detect its type:
-  - `*.atlassian.net/browse/*` → Jira ticket URL; prefer Atlassian MCP if connected, else Jira REST API via curl.
+- **Jira ticket key** — matches `[A-Z]+-[0-9]+` → fetch that ticket.
+- **URL** — starts with `https://` or `http://`, detect sub-type:
+  - `*.atlassian.net/browse/*` → Jira ticket URL.
   - `github.com/*/pull/*` → GitHub PR URL; fetch via `gh` CLI.
-  - `*.atlassian.net/wiki/*` → Confluence page URL; prefer Atlassian MCP if connected, else Confluence REST API via curl.
+  - `*.atlassian.net/wiki/*` → Confluence page URL.
   - Anything else → generic URL; fetch via `curl`.
-- If `$ARGUMENTS` is non-empty but does not match any URL or ticket key pattern → treat it as free text and use directly as the feature context.
-- Everything after the first whitespace-delimited token (URL or ticket key) is optional additional context that should shape the AC: focus areas, audience, risk areas, things to emphasize or de-emphasize.
+- **Repo code request** — any token or phrase that explicitly asks to consult the connected repo (e.g. `--repo`, `repo:`, "check the repo", "use the codebase", "include code") → sets a `USE_REPO=true` flag.
+  Do **not** consult the repo unless this flag is set.
+- **Free text** — everything that is not a ticket key, URL, or repo request flag → treat as literal feature context.
 
-Before proceeding, present a one-line input summary stating what type of input was detected and where the content is coming from.
+If `$ARGUMENTS` is empty → use the current conversation as context only.
+
+Fetch all identified sources in the order they appear.
+Merge their contents into a single unified feature context before proceeding.
+
+Before proceeding, present a one-line input summary listing every detected source type and whether repo lookup is enabled.
 
 ## Step 1: Fetch content
+
+Fetch each detected source in turn and merge results into one unified feature context.
 
 ### Case A: Empty input
 
@@ -168,15 +176,18 @@ Use that text as the feature context.
 Use `$ARGUMENTS` directly as the feature context.
 No fetching needed.
 
-## Step 1.5: Detect repo context (optional)
+## Step 1.5: Repo context (only when explicitly requested)
 
-Check whether the current working directory is inside an app repository:
+**Only run this step if `USE_REPO=true`** (user passed a repo request flag in `$ARGUMENTS`).
+Never consult the repository on your own initiative.
+
+Verify a git repo is reachable:
 
 ```bash
 REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null)
 ```
 
-If `REPO_ROOT` is empty, skip this step silently and proceed to Step 2.
+If `REPO_ROOT` is empty, tell the user no git repository was found at the current working directory and skip to Step 2.
 
 If `REPO_ROOT` is set:
 
