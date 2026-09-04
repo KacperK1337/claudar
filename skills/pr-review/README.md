@@ -84,11 +84,15 @@ Notes on the input:
 
 ## What happens when you run it
 1. The skill resolves your argument to a PR via `gh`, then fetches the PR metadata and the full diff.
-2. It reads every file changed in the PR in full from your local working tree - not just the diff hunks - so context around the changes is real.
-3. It explores the broader codebase for related patterns, utilities, and conventions, so the review can flag things like "this duplicates a function that already exists at X".
-4. Any extra context you passed shapes emphasis (security, performance, backward compatibility, etc.).
-5. It produces a structured review covering: correctness, security, performance, architecture, code reuse, testing, naming, API design, and dependencies.
-6. It ends with a verdict: `REJECT` / `CHANGES REQUESTED` / `APPROVE WITH NITS` / `APPROVE`.
+2. If the PR description contains a Jira ticket key (`PROJ-123`) or a Jira browse URL, the skill automatically fetches that ticket and uses it to verify the PR implements what was asked.
+Fetch uses the Atlassian MCP integration if connected, otherwise falls back to `curl` with `JIRA_ORG`/`JIRA_EMAIL`/`JIRA_API_TOKEN`.
+If the ticket cannot be fetched, the review still proceeds normally and a note is appended at the end.
+3. It reads every file changed in the PR in full from your local working tree - not just the diff hunks - so context around the changes is real.
+4. It explores the broader codebase for related patterns, utilities, and conventions, so the review can flag things like "this duplicates a function that already exists at X".
+5. Any extra context you passed shapes emphasis (security, performance, backward compatibility, etc.).
+6. It produces a structured review covering: correctness, security, performance, architecture, code reuse, testing, naming, API design, and dependencies.
+When a Jira ticket is found, ticket-based findings are folded into the existing sections (tagged `[Jira: KEY]`) rather than listed separately.
+7. It ends with a verdict: `REJECT` / `CHANGES REQUESTED` / `APPROVE WITH NITS` / `APPROVE`.
 
 ## Notes
 - The review is harsh by design. It simulates a senior staff engineer who knows the codebase and refuses to wave anything through.

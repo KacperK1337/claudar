@@ -70,6 +70,61 @@ Also present a short **Additional Review Context** section:
 - explain how that context changes or sharpens the review focus
 - if no extra context was provided, say that none was supplied
 
+## Step 1.5: Jira ticket context (automatic)
+
+Scan the PR description from Step 1 for Jira ticket references:
+
+- Bare ticket key: pattern `[A-Z]+-[0-9]+` (e.g. `PROJ-123`)
+- Jira browse URL: pattern `*.atlassian.net/browse/*`
+
+If no reference is found, skip this step entirely and proceed to Step 2.
+
+If a reference is found, extract the ticket key and attempt to fetch the ticket.
+**This step must never block the review.**
+If fetching fails for any reason, record the failure reason as `JIRA_FETCH_FAILED` and proceed to Step 2.
+
+**Option 1 — Atlassian MCP (preferred when connected):**
+
+If the `mcp__claude_ai_Atlassian__getJiraIssue` tool is available, call it directly with the ticket key.
+No environment variables are needed.
+Extract: key, summary, description, any acceptance criteria, issue type.
+
+**Option 2 — curl fallback (when MCP is not connected or fails):**
+
+Resolve the Jira base URL from `JIRA_ORG`:
+
+```bash
+if [ -z "$JIRA_ORG" ]; then
+  JIRA_FETCH_FAILED="JIRA_ORG env var not set — cannot construct Jira URL"
+fi
+JIRA_URL="https://${JIRA_ORG}.atlassian.net"
+```
+
+Fetch the ticket:
+
+```bash
+curl -s "${JIRA_URL}/rest/api/2/issue/${TICKET_KEY}?fields=summary,description,issuetype,priority,labels,components,acceptance" \
+  -H "Accept: application/json"
+```
+
+If the response is a 401 or 403, retry with Basic auth:
+
+```bash
+curl -s "${JIRA_URL}/rest/api/2/issue/${TICKET_KEY}?fields=summary,description,issuetype,priority,labels,components,acceptance" \
+  -H "Accept: application/json" \
+  -u "${JIRA_EMAIL}:${JIRA_API_TOKEN}"
+```
+
+If authentication is still required but credentials are missing, set:
+
+```
+JIRA_FETCH_FAILED="auth required but JIRA_EMAIL/JIRA_API_TOKEN not set"
+```
+
+If both options fail: set `JIRA_FETCH_FAILED` with a short reason and proceed. Do not stop.
+
+If the ticket is fetched: store the data as `JIRA_CONTEXT` and note the ticket key.
+
 ## Step 2: Get the diff
 
 Get the full diff:
@@ -117,11 +172,17 @@ One of:
 ### Critical Issues
 Issues that MUST be fixed. These block the PR. Each issue should reference the specific file and line(s).
 
+If `JIRA_CONTEXT` is available and the ticket has substantive content (non-empty description or AC): include any ticket-based findings here that qualify as critical — i.e. a requirement clearly stated in the ticket that is completely absent from the PR. Tag each such finding with `[Jira: KEY]`.
+
 ### Major Concerns
 Significant problems that strongly should be addressed - design issues, potential bugs, performance problems, security concerns.
 
+If `JIRA_CONTEXT` is available: include ticket-based findings that qualify as major — i.e. the PR partially implements or contradicts what the ticket specifies. Tag each with `[Jira: KEY]`.
+
 ### Minor Issues & Nits
 Style inconsistencies, naming suggestions, minor improvements, readability tweaks.
+
+If `JIRA_CONTEXT` is available: include ticket-based findings that qualify as minor — small deviations where the ticket is vague and the PR may be fine but is worth flagging. Tag each with `[Jira: KEY]`. Also note here if the PR contains significant changes clearly out of scope of the ticket.
 
 ### Codebase Consistency
 Specific observations about whether the PR follows established patterns in the codebase. Call out:
@@ -194,3 +255,7 @@ Never ignore additional review context. Either:
 
 - incorporate it into the review, or
 - explicitly explain why it should not change the review outcome.
+
+If `JIRA_FETCH_FAILED` is set, append this note at the very end of the review (after all sections):
+
+> **Note:** Jira ticket `[KEY]` was referenced in the PR description but could not be fetched (`[reason]`). Ticket alignment was not checked.
