@@ -4,8 +4,8 @@ Audit an installed skill against Anthropic's skill-writing best practices and fi
 ## Why use it
 Skills get written fast and drift from good practice.
 They grow past 500 lines, bury important rules, use first-person descriptions, or skip checks on their output.
-This skill takes the name of one skill, checks it against 10 rules, including the frontmatter limits, shows you a findings table, fixes the violations, and reports what changed.
-It works on a copy and never edits the original without your approval.
+This skill takes the name of one skill, checks it against 10 rules, including the frontmatter limits, shows you a findings table, fixes the ones you pick, and reports what changed.
+It never changes anything before you choose which fixes to apply.
 
 ## Quick example
 ```text
@@ -21,7 +21,8 @@ You get back a findings table like:
 | 5 | Concise / 3rd-person | FAIL | Description does not say when to use | Rewrite description |
 ```
 
-Then the fixed skill and a short report of every change.
+Then it asks which fixes to apply: `all`, or a list like `2, 5`.
+After your answer it edits the skill and reports every change.
 
 ## Setup
 No extra tools needed.
@@ -51,18 +52,19 @@ Examples:
 
 ## What happens when you run it
 1. It finds the skill by name in `./skills/`, `./.claude/skills/`, or `~/.claude/skills/`.
-2. It copies the skill to `/tmp/audit/` and keeps an untouched backup next to it.
-3. It gathers facts with `wc` and `grep`: line counts, links between files, description and name length, and scripts.
-4. It judges 10 rules: progressive disclosure, contents lists, degrees of freedom, model fit, concise writing, checklists, feedback loops, patterns, portability, and hooks.
-5. It shows a findings table with evidence and the planned fix for each rule.
-6. It fixes violations one rule at a time, keeping every instruction, number, and path from the original.
-7. It re-checks all rules until every rule passes or a decision is left to you.
-8. It shows a diff and a final report, and offers to copy the fixed skill over the original.
+2. It gathers facts with `wc` and `grep`: line counts, links between files, description and name length, repeated text, and shell snippets.
+3. It judges 10 rules: progressive disclosure, contents lists, degrees of freedom, model fit, concise writing, checklists, feedback loops, patterns, portability, and hooks.
+4. It shows a findings table with evidence and the planned fix for each rule, then asks which fixes to apply: all, or a list of numbers.
+5. It edits the original files in place, only with the fixes you chose, keeping every instruction, number, and path from the original.
+6. It updates the skill's `README.md` if a fix changes usage, requirements, or behavior.
+7. It re-checks all rules, shows the diff, and reports what changed.
 
 ## Safety guarantees
-- Edits happen only on a copy in `/tmp/audit/`.
-- The original is replaced only after you approve.
-- Fixes that change what a skill does (not just how it is written) need your confirmation first.
+- Nothing is changed before you answer which fixes to apply.
+- Skills inside a git repo are edited in place, and git is your backup.
+If the skill folder already has uncommitted changes, it asks before continuing.
+- Skills outside git, like those in `~/.claude/skills`, are backed up to `/tmp/audit/` first.
+- Nothing is committed.
 - Hooks are proposed in the report only.
 Nothing is added to your settings unless you agree.
 - It never claims a skill was tested on a model when it was not.
