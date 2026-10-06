@@ -119,7 +119,8 @@ ignore internal admin flows
 4. It analyzes the merged content for user-facing behaviors, inputs and outputs, error states, and constraints — described from the user's perspective, not the implementation's.
 5. Any free-text context you passed shapes the scope, focus, or emphasis of the output.
 6. It produces 5–10 bullet points written in app-domain language: what the user does, what they see, what the app returns — nothing from the codebase.
-7. Output is plain markdown, ready to paste into Jira, Confluence, a test plan, or a PR description.
+7. It checks its own output against a short list: 5–10 bullets, no code identifiers, nothing invented, extra context handled, and fixes any failure before sending.
+8. Output is plain markdown, ready to paste into Jira, Confluence, a test plan, or a PR description.
 
 ## Safety guarantees
 - Read-only.

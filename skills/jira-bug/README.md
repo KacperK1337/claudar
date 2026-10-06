@@ -14,22 +14,29 @@ After debugging an intermittent 500 error with Claude, run:
 
 You get back something like:
 ```
-Summary: Intermittent 500 on POST /orders when cart contains a discounted item
+## Title
+Intermittent 500 on POST /orders when cart contains a discounted item
 
-Root cause: discount lookup races with cart serialization; null is read before the
-discount worker finishes writing.
+## Description
 
-Steps to reproduce:
-  1. Create a cart with a single discounted item.
-  2. Submit POST /orders within ~50 ms of cart creation.
-  3. Observe 500 in 1-3 attempts out of 10.
+### Summary
+Placing an order right after creating a cart with a discounted item fails with a 500 in 1-3 of 10 attempts.
 
-Expected behavior: order creation succeeds; discount is applied.
+### Root Cause
+Discount lookup races with cart serialization; null is read before the discount worker finishes writing.
 
-Acceptance criteria:
-  - Order creation never returns 500 due to discount race.
-  - Existing happy-path orders are unaffected.
-  - Regression test added covering the timing window.
+### Steps to Reproduce
+1. Create a cart with a single discounted item.
+2. Submit POST /orders within ~50 ms of cart creation.
+3. Observe 500 in 1-3 attempts out of 10.
+
+### Expected Behavior
+Order creation succeeds and the discount is applied.
+
+### Acceptance Criteria
+- Order creation never returns 500 due to discount race.
+- Existing happy-path orders are unaffected.
+- Regression test added covering the timing window.
 ```
 
 You can sharpen the output by adding context after the command:
@@ -68,8 +75,10 @@ call out that the root cause is still unconfirmed if needed
 1. The skill reads the full conversation history in the current session.
 2. It pulls out the bug-relevant pieces: what broke, what was expected, what was tried, what worked.
 3. Any context you passed with the command shapes the wording, audience, or focus areas.
-4. It produces a structured ticket with: summary, root cause, steps to reproduce, expected behavior, and acceptance criteria.
-5. The output is plain text, ready to paste into Jira.
+4. It produces a structured ticket with: title, summary, root cause, steps to reproduce, expected behavior, and acceptance criteria.
+5. It checks the ticket before sending: title length, all sections present, nothing invented, no conversation chatter.
+If a check fails, it fixes the ticket and checks again.
+6. The output is plain text, ready to paste into Jira.
 
 ## Safety guarantees
 - Only uses information present in the current conversation - no fabrication, no general advice.

@@ -37,7 +37,7 @@ If a leftover gap of less than 30 minutes remains (for example because a 45-minu
 Meetings and existing entries are never touched, and no entry is ever shrunk below 30 minutes.
 
 ## Setup
-You need `curl` and `jq` on your machine, plus the following environment variables exported in your shell:
+You need `curl`, `jq` and `bash` on your machine, plus the following environment variables exported in your shell:
 
 ```bash
 # Tempo
@@ -97,8 +97,9 @@ Notes on the input format:
 3. **Your work entries**: parsed from your one-liner, in order.
 4. **The 8-hour rule**: existing entries + new meetings + your work entries always equal exactly 8 hours. If the day is short, the skill adds 30 minutes to your work entries one at a time, starting with the longest and cycling back to the top until the next +30 would overshoot. If the day is over, it subtracts 30 minutes the same way (longest first, never below 30 minutes). Any leftover gap of less than 30 minutes (e.g. from a 45-minute meeting) is closed by a single non-30 residual step on the next entry in the walk order, so the day always lands on 480 minutes exactly. Meetings and existing entries are never touched.
 5. **Scheduling**: the day is laid out starting at 09:00. Each work entry is placed in the next gap that fits it whole - entries are never split across meetings. Existing entries on the day are treated as immovable, just like meetings.
-6. **Posting**: every new record (meetings + work entries) is sent to Tempo in one parallel batch. Existing entries are never re-posted, modified, or deleted.
-7. You get a final table showing every record on the day, marking which ones are new vs already there.
+6. **Pre-POST check**: before anything is sent, the plan is checked for the exact 8-hour total, the 30-minute minimum, overlaps, and duplicate meetings. If a check fails, the plan is fixed first, or the skill stops without posting.
+7. **Posting**: every new record (meetings + work entries) is sent to Tempo in one parallel batch. Existing entries are never re-posted, modified, or deleted.
+8. You get a final table showing every record on the day, marking which ones are new vs already there.
 
 ## Safety guarantees
 - Existing Tempo entries are read-only - never edited, moved, or deleted.

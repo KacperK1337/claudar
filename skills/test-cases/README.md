@@ -88,5 +88,6 @@ Everything that is not a recognized URL or ticket key is treated as additional f
 2. It fetches each source: Jira via MCP or REST API, GitHub PRs via `gh`, URLs via `curl`.
 3. If you included a repo flag (e.g., `use current branch`), it explores the local codebase for real routes, endpoints, and page names to use in test steps.
 4. It synthesizes a feature description covering user flows, entry points, error paths, and edge cases.
-5. It outputs 5–10 numbered test cases in Steps + Expected Result format, ordered happy path → negative → edge cases.
-6. It ends with a Coverage Notes section listing assumptions, ambiguities, and any sources that failed to load.
+5. It checks its own test cases (coverage, ordering, no code identifiers, observable results) and fixes anything that fails before showing them.
+6. It outputs 5–10 numbered test cases in Steps + Expected Result format, ordered happy path → negative → edge cases.
+7. It ends with a Coverage Notes section listing assumptions, ambiguities, and any sources that failed to load.
