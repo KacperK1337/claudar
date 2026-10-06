@@ -1,4 +1,4 @@
-# skill-auditor
+# audit-skill
 Audit an installed skill against Anthropic's skill-writing best practices and fix what is wrong.
 
 ## Why use it
@@ -9,7 +9,7 @@ It never changes anything before you choose which fixes to apply.
 
 ## Quick example
 ```text
-/skill-auditor write-ac
+/audit-skill write-ac
 ```
 
 You get back a findings table like:
@@ -30,13 +30,13 @@ The skill uses standard shell commands like `wc` and `grep` to gather facts.
 
 ## Installation
 ```bash
-./install.sh skill-auditor
+./install.sh audit-skill
 ```
 
 ## Usage
 Basic shape:
 ```text
-/skill-auditor <skill-name>
+/audit-skill <skill-name>
 ```
 
 The argument is the name of an installed skill.
@@ -45,9 +45,9 @@ Pass `all` to audit every skill in `./skills` (or `~/.claude/skills` if there is
 
 Examples:
 ```text
-/skill-auditor pr-review
-/skill-auditor write-ac
-/skill-auditor all
+/audit-skill pr-review
+/audit-skill write-ac
+/audit-skill all
 ```
 
 ## What happens when you run it

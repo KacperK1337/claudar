@@ -1,5 +1,5 @@
 ---
-name: skill-auditor
+name: audit-skill
 description: Audits and fixes a Claude skill against Anthropic's skill-authoring best practices. Use when the user gives a skill name and asks to audit, review, lint, upgrade, optimize or fix it, or asks whether a skill follows best practices.
 ---
 
