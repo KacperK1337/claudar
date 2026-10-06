@@ -92,7 +92,8 @@ If the ticket cannot be fetched, the review still proceeds normally and a note i
 5. Any extra context you passed shapes emphasis (security, performance, backward compatibility, etc.).
 6. It produces a structured review covering: correctness, security, performance, architecture, code reuse, testing, naming, API design, and dependencies.
 When a Jira ticket is found, ticket-based findings are folded into the existing sections (tagged `[Jira: KEY]`) rather than listed separately.
-7. It ends with a verdict: `REJECT` / `CHANGES REQUESTED` / `APPROVE WITH NITS` / `APPROVE`.
+7. Before sending, it checks the review (file and line references, verdict matches the issues found, extra context handled, Jira tags) and fixes it if a check fails.
+8. It ends with a verdict: `REJECT` / `CHANGES REQUESTED` / `APPROVE WITH NITS` / `APPROVE`.
 
 ## Notes
 - The review is harsh by design. It simulates a senior staff engineer who knows the codebase and refuses to wave anything through.

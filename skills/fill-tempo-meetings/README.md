@@ -21,7 +21,7 @@ For each workday from April 1st through yesterday, the skill:
 At the end you get a per-day report and a grand total of hours logged.
 
 ## Setup
-You need `curl` and `jq` on your machine, plus the following environment variables exported in your shell:
+You need `curl`, `jq` and `bash` on your machine, plus the following environment variables exported in your shell:
 
 ```bash
 # Tempo
@@ -90,7 +90,8 @@ For every workday in the range, the skill:
    - anything shorter than 30 minutes
 3. Skips meetings already logged in Tempo under your meeting ticket - no duplicates.
 4. If a non-meeting Tempo entry overlaps with a real meeting (or would push the day above 8h), it shifts or shortens that entry to make room. Existing meeting entries are left alone.
-5. Creates one Tempo record per remaining meeting, with the real start time and duration, under `TEMPO_MEETING_TICKET`.
+5. Checks the whole plan before sending anything: meetings at their real times, no overlaps, nothing under 30 minutes, no day above 8h. If a check fails, the plan is fixed first.
+6. Creates one Tempo record per remaining meeting, with the real start time and duration, under `TEMPO_MEETING_TICKET`.
 
 At the end you get a per-day line:
 ```

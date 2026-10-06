@@ -1,9 +1,36 @@
 ---
 name: add-tempo
-description: Log time records to Jira Tempo with automatic calendar meeting integration
+description: Logs time records to Jira Tempo and fills an 8-hour day, adding meetings from an Outlook calendar automatically. Use when the user wants to log, book, or add hours to Tempo for a day, optionally with a date and ticket keys with durations.
 ---
 
 You are a time-tracking assistant that logs work records into Jira Tempo. You combine Outlook calendar meetings with user-provided work entries to fill an 8-hour workday.
+
+## Contents
+- Progress checklist
+- Execution model
+- Prerequisites
+- Steps 1-11 (Step 4b and Step 8b are in between)
+- Rules
+
+## Progress checklist
+
+Copy this into your reply and tick items as you go:
+
+```
+Tempo progress:
+- [ ] 1. Check prerequisites and resolve the account ID
+- [ ] 2. Determine the target date
+- [ ] 3. Fetch calendar meetings
+- [ ] 4. Resolve Jira issue IDs and fetch existing worklogs (4b)
+- [ ] 5. Plan meeting records
+- [ ] 6. Parse user work entries
+- [ ] 7. Adjust durations to fill 8 hours
+- [ ] 8. Schedule work entries around meetings
+- [ ] 8b. Pre-POST check. If any check fails, go back to step 5, 7, or 8
+- [ ] 9. POST all worklogs
+- [ ] 10. Validate the 8-hour day
+- [ ] 11. Print the final summary
+```
 
 ## Execution model
 
@@ -34,13 +61,10 @@ for var in TEMPO_API_TOKEN JIRA_ORG JIRA_EMAIL JIRA_API_TOKEN TEMPO_MEETING_TICK
 done
 ```
 
-If any are missing, print a helpful message telling the user to export them and stop.
+Run every shell snippet in this skill with `bash`, not zsh - they use bash-only syntax such as `${!var}` and `${!ARRAY[@]}`.
 
 Construct the Jira base URL:
 ```bash
-if [ -z "$JIRA_ORG" ]; then
-  echo "Error: JIRA_ORG is not set." && exit 1
-fi
 JIRA_URL="https://${JIRA_ORG}.atlassian.net"
 ```
 
@@ -238,11 +262,23 @@ Build the day's schedule starting at **09:00** (9 AM).
 4. It is OK to have gaps/breaks between records. Records do not need to be back-to-back.
 5. If no gap from 09:00 onward fits the entry, the placement may extend past 17:00 - that is acceptable. Do not shrink the entry to make it fit earlier.
 
+## Step 8b: Pre-POST check
+
+Before any POST, verify the full plan (meetings + user entries, plus existing records from Step 4b):
+1. The day totals exactly 480 minutes, unless the floor-constraint hard-stop in Step 7 fired.
+2. Every new record is at least 30 minutes.
+3. No record overlaps another record or an occupied window.
+4. No planned meeting duplicates an existing meeting worklog.
+5. Every user entry is exactly one record.
+
+If any check fails, go back to Step 5, 7, or 8 (whichever produced the problem), fix the plan, and re-run the checks.
+If it cannot be fixed, stop before Phase B and tell the user why.
+
 ## Step 9: POST all worklogs to Tempo (parallel)
 
 Now POST every record from the plan - newly planned meetings (Step 5, post-dedup) AND user work entries (Step 8). **Never re-POST existing records from Step 4b** - they already exist and a re-POST would create duplicates.
 
-Tempo has no bulk endpoint, so fire every record concurrently as a single batch and `wait` once. Capture each response to a separate file/array keyed by record index so per-record success can be aggregated after `wait`.
+Tempo has no bulk endpoint, so fire every record concurrently as a single batch and `wait` once. Capture each response body and HTTP status code to separate files keyed by record index so per-record success can be aggregated after `wait`.
 
 ```bash
 for i in "${!ALL_RECORDS[@]}"; do
@@ -250,14 +286,15 @@ for i in "${!ALL_RECORDS[@]}"; do
     -H "Authorization: Bearer ${TEMPO_API_TOKEN}" \
     -H "Content-Type: application/json" \
     -d "${ALL_RECORDS[$i]}" \
-    > "/tmp/resp_${i}.json" &
+    -o "/tmp/resp_${i}.json" -w "%{http_code}" > "/tmp/code_${i}.txt" &
 done
 wait
 ```
 
-**Do not** wrap `curl` calls in a serial loop (e.g. Python `subprocess.run([...])` without async/threading) - that defeats the parallelism and makes a 10-record day take 10× longer than a 1-record day. Use `asyncio` + `aiohttp` or `concurrent.futures.ThreadPoolExecutor(max_workers=16)` if implementing in Python.
+**Do not** wrap `curl` calls in a serial loop - that defeats the parallelism and makes a 10-record day take 10× longer than a 1-record day.
 
-If a POST returns a non-2xx response, capture and print the response body. After `wait`, if any POST failed, print every failure and exit non-zero - do not retry, do not silently skip.
+A POST succeeded only if its `/tmp/code_${i}.txt` holds a 2xx status code.
+If a POST returns a non-2xx status code, print the response body from `/tmp/resp_${i}.json`. After `wait`, if any POST failed, print every failure and exit non-zero - do not retry, do not silently skip.
 
 Print each posted entry as confirmation:
 ```

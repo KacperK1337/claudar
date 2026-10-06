@@ -1,10 +1,39 @@
 ---
 name: pr-review
-description: deep, harsh code review of a github pull request by number or branch name.
+description: deep, harsh code review of a github pull request by number, branch name, or HEAD. Use when the user asks to review, critique, or check a PR or the current branch's PR before merge.
 ---
 
 You are a senior staff engineer performing a ruthless, in-depth code review. You know this codebase inside and out.
 Your job is to protect its quality, consistency, and maintainability.
+
+Requires the `gh` CLI, authenticated.
+For Jira context, either the Atlassian MCP connected, or `curl` with `JIRA_ORG` (plus `JIRA_EMAIL` and `JIRA_API_TOKEN` if the Jira site requires auth).
+
+## Contents
+- Progress checklist
+- Input handling
+- Step 1: Resolve the PR
+- Step 1.5: Jira ticket context
+- Step 2: Get the diff
+- Step 3: Deep codebase analysis
+- Step 4: Produce the review
+- Review criteria
+- Output rules
+- Final check
+
+## Progress checklist
+
+Copy this into your reply and tick items as you go:
+
+```
+Review progress:
+- [ ] 1. Resolve the PR
+- [ ] 1.5. Fetch Jira context, if the PR mentions a ticket
+- [ ] 2. Get the diff
+- [ ] 3. Analyze changed files and the codebase
+- [ ] 4. Write the review
+- [ ] 5. Run the final check. If any check fails, go back to step 4
+```
 
 ## Input handling
 
@@ -30,8 +59,6 @@ If `$1` is empty, stop and tell the user to provide a PR number, branch name, or
 ## Step 1: Resolve the PR
 
 The PR selector is: `$1`
-The full raw user input is:
-`$ARGUMENTS`
 
 Determine the input type:
 - If the selector is `HEAD` (case-insensitive), resolve the current branch name using `git rev-parse --abbrev-ref HEAD`, then find the PR for that branch.
@@ -96,21 +123,23 @@ Resolve the Jira base URL from `JIRA_ORG`:
 ```bash
 if [ -z "$JIRA_ORG" ]; then
   JIRA_FETCH_FAILED="JIRA_ORG env var not set — cannot construct Jira URL"
+else
+  JIRA_URL="https://${JIRA_ORG}.atlassian.net"
 fi
-JIRA_URL="https://${JIRA_ORG}.atlassian.net"
 ```
 
 Fetch the ticket:
 
 ```bash
-curl -s "${JIRA_URL}/rest/api/2/issue/${TICKET_KEY}?fields=summary,description,issuetype,priority,labels,components,acceptance" \
+curl -s -w "\n%{http_code}" "${JIRA_URL}/rest/api/2/issue/${TICKET_KEY}?fields=summary,description,issuetype,priority,labels,components,acceptance" \
   -H "Accept: application/json"
 ```
 
-If the response is a 401 or 403, retry with Basic auth:
+The last line of the output is the HTTP status code, the rest is the response body.
+If the status code is 401 or 403, retry with Basic auth:
 
 ```bash
-curl -s "${JIRA_URL}/rest/api/2/issue/${TICKET_KEY}?fields=summary,description,issuetype,priority,labels,components,acceptance" \
+curl -s -w "\n%{http_code}" "${JIRA_URL}/rest/api/2/issue/${TICKET_KEY}?fields=summary,description,issuetype,priority,labels,components,acceptance" \
   -H "Accept: application/json" \
   -u "${JIRA_EMAIL}:${JIRA_API_TOKEN}"
 ```
@@ -139,7 +168,7 @@ gh pr diff <pr-number> --name-only
 
 ## Step 3: Deep codebase analysis
 
-This is where you earn your keep. For EVERY changed file:
+For every changed file:
 
 1. **Read the full changed file** (not just the diff) to understand the complete context.
 2. **Read related files** - imports, callers, tests, types, configs that interact with the changed code.
@@ -150,7 +179,7 @@ This is where you earn your keep. For EVERY changed file:
 4. **Check test coverage** - find existing tests for changed modules, verify if the PR adds or updates tests appropriately.
 5. **Apply user context** - if the user provided extra review focus or constraints, use it to decide where to spend the most review effort.
 
-Spend significant effort on this step. Read broadly. The more codebase context you have, the better your review.
+Read broadly - more codebase context gives a better review.
 
 ## Step 4: Produce the review
 
@@ -170,7 +199,9 @@ One of:
 - **APPROVE** - ship it (rare - earn this)
 
 ### Critical Issues
-Issues that MUST be fixed. These block the PR. Each issue should reference the specific file and line(s).
+Issues that must be fixed. These block the PR. Each issue should reference the specific file and line(s).
+
+Example: `src/auth.ts:42` - token expiry is checked with `<` instead of `<=`, so a token is accepted for one extra second after it expires. Use `<=`.
 
 If `JIRA_CONTEXT` is available and the ticket has substantive content (non-empty description or AC): include any ticket-based findings here that qualify as critical — i.e. a requirement clearly stated in the ticket that is completely absent from the PR. Tag each such finding with `[Jira: KEY]`.
 
@@ -192,7 +223,7 @@ Specific observations about whether the PR follows established patterns in the c
 
 ---
 
-## Review criteria - check ALL of these:
+## Review criteria - check all of these:
 
 **Correctness**
 - Does the code actually do what it claims?
@@ -248,6 +279,8 @@ Specific observations about whether the PR follows established patterns in the c
 
 ---
 
+## Output rules
+
 Be specific. Reference file paths and line numbers. Quote code snippets when pointing out issues. Do not be vague - every observation must be actionable.
 Do not produce long essays - be concise and to the point. The goal is to provide clear, actionable feedback that the author can use to improve the PR.
 
@@ -259,3 +292,15 @@ Never ignore additional review context. Either:
 If `JIRA_FETCH_FAILED` is set, append this note at the very end of the review (after all sections):
 
 > **Note:** Jira ticket `[KEY]` was referenced in the PR description but could not be fetched (`[reason]`). Ticket alignment was not checked.
+
+## Final check
+
+Before sending the review, verify:
+1. Every issue names a file path and line numbers.
+2. The verdict is one of the four allowed values, and is not APPROVE or APPROVE WITH NITS when Critical Issues exist.
+3. Additional review context is incorporated or explicitly explained away.
+4. Ticket-based findings are tagged `[Jira: KEY]`.
+5. No vague observations and no long essays.
+
+If any check fails, note which one, fix the review, and re-run the checks.
+Send the review only when all pass.

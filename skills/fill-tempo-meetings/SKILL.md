@@ -1,17 +1,42 @@
 ---
 name: fill-tempo-meetings
-description: Backfill missing Tempo meeting worklogs from a user-provided start date.
+description: Backfills missing Tempo worklogs for past Outlook calendar meetings, from a start date up to yesterday. Use when the user wants to catch up, backfill, or fill in meeting time in Tempo for past days.
 ---
 
 # Fill tempo meetings
-Backfill missing Tempo worklogs for calendar meetings from a start date.
-
 This skill logs **only meetings** from the user's Outlook ICS calendar. It logs every valid meeting under `TEMPO_MEETING_TICKET`.
 
 ## Core principle
 Calendar meetings are the authoritative source for meeting worklogs. If a past workday has valid meetings, log those meeting durations under the configured meeting ticket. Existing non-meeting Tempo worklogs must not block meetings; move or shorten them when needed so meeting records occupy their real calendar windows and the day remains safely capped at 8h.
 
+## Contents
+- Progress checklist
+- Prerequisites
+- Step 1: Parse arguments
+- Step 2: Fetch all setup data in parallel
+- Step 3: Extract calendar meetings for each date
+- Step 4: Deduplicate meetings and make room for them
+- Step 5: Process each date chronologically (5a-5g)
+- Step 6: Grand summary
+- Hard rules
+
+## Progress checklist
+Copy this into your reply and tick items as you go:
+
+```
+Backfill progress:
+- [ ] 1. Check prerequisites and parse the start date
+- [ ] 2. Fetch setup data (worker ID, ICS, issue ID, existing worklogs)
+- [ ] 3. Extract valid meetings for each date
+- [ ] 4. Deduplicate meetings and plan worklog adjustments
+- [ ] 5. Run the pre-write check (5e). If any check fails, go back to step 4
+- [ ] 6. Send all PUTs and POSTs in one batch
+- [ ] 7. Print the day results and the grand summary
+```
+
 ## Prerequisites
+Run every shell snippet in this skill with `bash`, not zsh - they use bash-only syntax such as `${!var}`.
+
 Required env vars:
 
 | Variable                | Description                                                                      |
@@ -88,7 +113,7 @@ Reuse this in-memory worklog snapshot for all downstream logic. **Do not re-GET 
 
 Use existing worklogs to detect already-logged meetings, occupied windows, and total daily time. Existing meeting worklogs on `TEMPO_MEETING_TICKET` may cover meetings and should prevent duplicates. Existing non-meeting worklogs are movable/resizable when they conflict with valid meetings or when the day would exceed 8h after adding meetings.
 
-## Step 6: Extract calendar meetings for each date
+## Step 3: Extract calendar meetings for each date
 From `/tmp/outlook_calendar.ics`, extract `VEVENT`s occurring on the target date. Pull at least:
 - `SUMMARY`
 - `DTSTART`
@@ -126,7 +151,7 @@ Honor recurrence enough to avoid false logs:
 
 Convert `DTSTART`/`DTEND` to the user's local timezone and use local `HH:MM` for Tempo `startTime`.
 
-## Step 7: Deduplicate meetings and make room for them
+## Step 4: Deduplicate meetings and make room for them
 For each valid meeting candidate:
 - Log it under `TEMPO_MEETING_TICKET` / `TEMPO_MEETING_ISSUE_ID`.
 - Preserve the real meeting duration. Never trim meetings.
@@ -156,21 +181,21 @@ For each date:
 
 Every Tempo record must be at least 30 minutes.
 
-## Step 8: Process each date chronologically
+## Step 5: Process each date chronologically
 
-### 8a - Weekends
+### 5a - Weekends
 Weekends are not in the workday list. If encountered defensively:
 ```text
 ⏭️ <DATE> - weekend, skipping.
 ```
 
-### 8b - No valid meetings
+### 5b - No valid meetings
 If no valid meetings remain after duplicate detection:
 ```text
 ⏭️ <DATE> (<Day>) - no meetings to log.
 ```
 
-### 8c - Adjust existing non-meeting worklogs
+### 5c - Adjust existing non-meeting worklogs
 Before posting new meeting logs, update existing non-meeting records that conflict with selected meeting windows or push the day over 8h.
 
 For moved records:
@@ -185,7 +210,7 @@ For shortened records:
 
 Use Tempo's worklog update endpoint (`PUT /4/worklogs/{tempoWorklogId}`) for each changed record. Build the PUT body **directly from the Step 2d snapshot** - do not issue a fresh GET per worklog. If an update fails, do not post a meeting into an overlapping slot; mark the day partial and continue.
 
-### 8d - Build meeting worklogs
+### 5d - Build meeting worklogs
 Each meeting becomes exactly one Tempo worklog:
 - `issueId`: `TEMPO_MEETING_ISSUE_ID`
 - `startDate`: target date
@@ -194,36 +219,50 @@ Each meeting becomes exactly one Tempo worklog:
 - `description`: meeting summary, or `Meeting` if summary is blank
 - `authorAccountId` / worker field: `TEMPO_WORKER_ID`, according to Tempo API requirements
 
-### 8e - Post all worklogs in one parallel batch
+### 5e - Pre-write check
+Before any PUT or POST, verify the full plan for every date:
+1. Every selected meeting sits at its real calendar start and end time and keeps its full duration.
+2. No worklog windows overlap on that date.
+3. Every record, including adjusted ones, is at least 30 minutes.
+4. Each date's total logged time is at most 8h.
+5. No date is today, in the future, or a weekend, and nothing is deleted.
+
+If any check fails, go back to Step 4, fix the plan (or drop the meeting that cannot fit and print the reason), and re-run the checks.
+Send nothing until all checks pass.
+
+### 5f - Post all worklogs in one parallel batch
 Tempo has no bulk API. After all per-day plans (adjustments + new meeting POSTs) are computed, fire the entire batch concurrently across **all dates at once** - do not serialize per record and do not wait between days.
 
 ```bash
 # adjustments first (PUTs), then meeting creates (POSTs), all in parallel
-for body in "${PUT_BODIES[@]}"; do
-  curl -s -X PUT "https://api.tempo.io/4/worklogs/${id}" \
+# PUT_IDS[i] is the tempoWorklogId for PUT_BODIES[i]
+for i in "${!PUT_BODIES[@]}"; do
+  curl -s -X PUT "https://api.tempo.io/4/worklogs/${PUT_IDS[$i]}" \
     -H "Authorization: Bearer ${TEMPO_API_TOKEN}" \
     -H "Content-Type: application/json" \
-    -d "$body" > "/tmp/resp_put_${id}.json" &
+    -d "${PUT_BODIES[$i]}" \
+    -o "/tmp/resp_put_${i}.json" -w "%{http_code}" > "/tmp/code_put_${i}.txt" &
 done
-for body in "${POST_BODIES[@]}"; do
+for i in "${!POST_BODIES[@]}"; do
   curl -s -X POST "https://api.tempo.io/4/worklogs" \
     -H "Authorization: Bearer ${TEMPO_API_TOKEN}" \
     -H "Content-Type: application/json" \
-    -d "$body" > "/tmp/resp_post_${i}.json" &
+    -d "${POST_BODIES[$i]}" \
+    -o "/tmp/resp_post_${i}.json" -w "%{http_code}" > "/tmp/code_post_${i}.txt" &
 done
 wait
 ```
-Capture each response to a file (or array) keyed by record ID/index so per-day results can be aggregated after `wait`. If a PUT (adjustment) fails for a date, drop the meeting that needed that adjustment, mark the day partial, and continue. If a POST fails, mark only that meeting failed; do not retry inside the run.
+Each response body and HTTP status code goes to a file keyed by record index, so per-day results can be aggregated after `wait`. A request succeeded only if its `code_*.txt` file holds a 2xx status code. If a PUT (adjustment) fails for a date, drop the meeting that needed that adjustment, mark the day partial, and continue. If a POST fails, mark only that meeting failed; do not retry inside the run.
 
-Equivalent in a single Python script: use `asyncio` + `aiohttp` or `concurrent.futures.ThreadPoolExecutor(max_workers=16)` and submit every adjustment + meeting at once. **Do not call `subprocess.run(['curl', ...])` in a serial Python loop** - that defeats parallelism.
+**Do not** send the requests one after another - that defeats parallelism.
 
-### 8f - One-line day result
+### 5g - One-line day result
 ```text
 ✅ <DATE> (<Day>) - <N> meeting records, <H>h <M>m logged, <A> existing records adjusted.
 ⚠️ <DATE> (<Day>) - partial, <H>h <M>m logged (<reason>).
 ```
 
-## Step 9: Grand summary
+## Step 6: Grand summary
 ```text
 🏁 fill-tempo-meetings complete
 ─────────────────────────────────

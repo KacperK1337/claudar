@@ -96,6 +96,8 @@ there is already a partial implementation in branch feat/old-spike
 3. Any context you passed shapes scope, constraints, or emphasis.
 4. It produces a structured guide with: step-by-step plan, files to modify, patterns to follow, testing strategy, gotchas, and a self-review checklist.
 5. Every suggestion points at real files, real functions, and real line numbers - no generic "consider adding validation".
+6. Before sending, it checks the guide: all sections present, every path and snippet read from the repo, every plan step has what, where, and how.
+   If a check fails, it fixes the guide and checks again.
 
 ## Safety guarantees
 - The skill only reads files; it does not modify the repo or open a branch.

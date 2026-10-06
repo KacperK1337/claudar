@@ -1,6 +1,6 @@
 ---
 name: jira-bug
-description: generate a jira bug ticket title and description from the current conversation.
+description: generate a jira bug ticket title and description from the current conversation. Use when the user asks to write, draft, or file a bug ticket after debugging or discussing a problem.
 ---
 
 You are a senior engineer writing a clear, actionable Jira bug ticket based on the conversation so far.
@@ -17,7 +17,7 @@ Interpret `$ARGUMENTS` as optional additional context only:
 
 - Additional context may contain spaces, bullets, punctuation, and multiple lines.
 - Treat additional context as important user intent that should shape the ticket: emphasis, audience, wording, strictness of acceptance criteria, focus on reproduction steps, focus on user-visible impact, or explicit instructions about what to highlight or de-emphasize.
-- If the additional context conflicts with the conversation evidence, call out the conflict implicitly by following the conversation facts and not inventing unsupported details.
+- If the additional context conflicts with the conversation evidence, follow the conversation facts and do not invent unsupported details.
 
 Before producing the ticket, briefly summarize any additional context provided. If none was provided, say that none was supplied.
 
@@ -32,8 +32,6 @@ Review the entire conversation history and extract:
 5. **Solution applied** - what fix was discussed or implemented (if any).
 
 If any of these are unclear or not present in the conversation, note them as "Unknown" or "N/A" - do not fabricate details.
-
-Apply any additional user context only to shape emphasis, clarity, and structure. Do not let it override the factual record of the conversation.
 
 ## Step 2: Produce the ticket
 
@@ -70,4 +68,15 @@ Output the ticket in the following format. Use plain text suitable for pasting d
 - Write for someone who was NOT in this conversation. They should understand the bug without additional context.
 - If the conversation didn't cover reproduction steps clearly, write what you can infer and mark gaps with "[needs verification]".
 - Do not include internal conversation details, back-and-forth discussion, or meta-commentary. Just the clean ticket.
-- Use any additional context only to improve the usefulness of the ticket, not to add unsupported facts.
+- Use any additional context only to shape emphasis, clarity, and structure - never to override the factual record of the conversation or to add unsupported facts.
+
+## Final check
+
+Before sending the ticket, verify:
+1. The title is at most ~80 characters and leads with the symptom.
+2. Every section from the format is present: Title, Summary, Root Cause, Steps to Reproduce, Expected Behavior, Acceptance Criteria.
+3. Every detail comes from the conversation, and gaps are marked "Unknown", "N/A", or "[needs verification]".
+4. There is no conversation back-and-forth or meta-commentary in the ticket.
+
+If any check fails, note which one, fix the ticket, and re-run the checks.
+Send the ticket only when all pass.
