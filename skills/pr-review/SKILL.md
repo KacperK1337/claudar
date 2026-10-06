@@ -1,6 +1,6 @@
 ---
 name: pr-review
-description: deep, harsh code review of a github pull request by number, branch name, or HEAD. Use when the user asks to review, critique, or check a PR or the current branch's PR before merge.
+description: Does a deep, harsh code review of a github pull request by number, branch name, or HEAD. Use when the user asks to review, critique, or check a PR or the current branch's PR before merge.
 ---
 
 You are a senior staff engineer performing a ruthless, in-depth code review. You know this codebase inside and out.
@@ -112,7 +112,7 @@ If fetching fails for any reason, record the failure reason as `JIRA_FETCH_FAILE
 
 **Option 1 — Atlassian MCP (preferred when connected):**
 
-If the `mcp__claude_ai_Atlassian__getJiraIssue` tool is available, call it directly with the ticket key.
+If the `Atlassian:getJiraIssue` tool is available, call it directly with the ticket key.
 No environment variables are needed.
 Extract: key, summary, description, any acceptance criteria, issue type.
 

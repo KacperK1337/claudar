@@ -69,7 +69,7 @@ Extract the ticket key from the URL, or use it directly.
 
 **Option 1 — Atlassian MCP (preferred when connected):**
 
-If the `mcp__claude_ai_Atlassian__getJiraIssue` tool is available to you, call it directly with the ticket key.
+If the `Atlassian:getJiraIssue` tool is available to you, call it directly with the ticket key.
 No environment variables are needed.
 Extract: ticket key, summary, description, any existing acceptance criteria, issue type.
 
@@ -149,7 +149,7 @@ Extract the page ID from the URL.
 
 **Option 1 — Atlassian MCP (preferred when connected):**
 
-If the `mcp__claude_ai_Atlassian__getConfluencePage` tool is available to you, call it directly with the page ID.
+If the `Atlassian:getConfluencePage` tool is available to you, call it directly with the page ID.
 No environment variables are needed.
 Extract the page title and body text.
 

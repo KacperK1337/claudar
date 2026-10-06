@@ -62,9 +62,9 @@ Examples:
 ## Safety guarantees
 - Nothing is changed before you answer which fixes to apply.
 - Skills inside a git repo are edited in place, and git is your backup.
-If the skill folder already has uncommitted changes, it asks before continuing.
+  If the skill folder already has uncommitted changes, it asks before continuing.
 - Skills outside git, like those in `~/.claude/skills`, are backed up to `/tmp/audit/` first.
 - Nothing is committed.
 - Hooks are proposed in the report only.
-Nothing is added to your settings unless you agree.
+  Nothing is added to your settings unless you agree.
 - It never claims a skill was tested on a model when it was not.

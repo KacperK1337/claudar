@@ -30,17 +30,35 @@ Audit progress:
 - [ ] 7. Report
 ```
 
-1. **Locate.** Find a folder named exactly like the argument that contains `SKILL.md`. Search `./skills/<name>`, `./.claude/skills/<name>`, `~/.claude/skills/<name>`. If nothing matches, try a partial match on the `name:` field. If several match, list them and ask. If none match, list the skills you can see and stop. Skip this when the argument is `all`.
-2. **Facts.** Work on the original files and do not edit anything yet. Collect with `wc -l`, `grep`, and by reading the files: line count of every `.md` file, whether files over 100 lines open with a contents list, links between files, description and name length, repeated lines or blocks, words in ALL CAPS, every shell snippet and the tools it uses, and any scripts and what they import.
-3. **Judge.** Mark each rule PASS, FAIL, N/A, or RECOMMEND with a one-line reason. Read the shell snippets and check they can actually do what the text says. Do not invent violations, and do not force a rule where it does not apply (a 30-line skill needs no references folder).
-4. **Findings table.** Show it (format below) and ask which fixes to apply: all, or a list of numbers. Wait for the answer. Do not change anything before it. If no rule failed, say so and stop.
-5. **Fix.** Apply only the chosen fixes, in this order: Rule 5, then 1, 2, 3, 6, 7, 8, then 9. Rules 4 and 10 are advice only and go in the report. Edit the original files in place.
-   - Skill inside a git repo: first run `git status --short <skill-folder>`. If the folder has uncommitted changes, tell the user and ask whether to continue. Git is the backup.
+1. **Locate.** Find a folder named exactly like the argument that contains `SKILL.md`.
+   Search `./skills/<name>`, `./.claude/skills/<name>`, `~/.claude/skills/<name>`.
+   If nothing matches, try a partial match on the `name:` field.
+   If several match, list them and ask.
+   If none match, list the skills you can see and stop.
+   Skip this when the argument is `all`.
+2. **Facts.** Work on the original files and do not edit anything yet.
+   Collect with `wc -l`, `grep`, and by reading the files: line count of every `.md` file, whether files over 100 lines open with a contents list, links between files, description and name length, repeated lines or blocks, words in ALL CAPS, every shell snippet and the tools it uses, and any scripts and what they import.
+3. **Judge.** Mark each rule PASS, FAIL, N/A, or RECOMMEND with a one-line reason.
+   Read the shell snippets and check they can actually do what the text says.
+   Do not invent violations, and do not force a rule where it does not apply (a 30-line skill needs no references folder).
+4. **Findings table.** Show it (format below) and ask which fixes to apply: all, or a list of numbers.
+   Wait for the answer.
+   Do not change anything before it.
+   If no rule failed, say so and stop.
+5. **Fix.** Apply only the chosen fixes, in this order: Rule 5, then 1, 2, 3, 6, 7, 8, then 9.
+   Rules 4 and 10 are advice only and go in the report.
+   Edit the original files in place.
+   - Skill inside a git repo: first run `git status --short <skill-folder>`.
+     If the folder has uncommitted changes, tell the user and ask whether to continue.
+     Git is the backup.
    - Skill outside git (for example `~/.claude/skills`): first copy the folder to `/tmp/audit/<name>.orig`.
    - If the skill has a `README.md`, update it when a fix changes usage, requirements, or behavior.
    - Follow the writing conventions of the repo the skill lives in (for example in its `CLAUDE.md`).
-6. **Re-check.** Re-judge all rules on the edited files. Also confirm: `SKILL.md` under 500 lines, every link resolves, no link chain deeper than one level, frontmatter is valid. Run `git diff <skill-folder>` (or `diff -ru /tmp/audit/<name>.orig <skill-folder>`) and account for every removed line.
-7. **Report.** Give the final report (format below). Do not commit.
+6. **Re-check.** Re-judge all rules on the edited files.
+   Also confirm: `SKILL.md` under 500 lines, every link resolves, no link chain deeper than one level, frontmatter is valid.
+   Run `git diff <skill-folder>` (or `diff -ru /tmp/audit/<name>.orig <skill-folder>`) and account for every removed line.
+7. **Report.** Give the final report (format below).
+   Do not commit.
 
 Safety rules for every fix:
 - **Preserve behavior** unless the user chose a fix that changes it. Every instruction, constraint, number, path, and project-specific fact must still exist afterward. Cut only generic explanations Claude already knows.

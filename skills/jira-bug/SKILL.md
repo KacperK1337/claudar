@@ -1,6 +1,6 @@
 ---
 name: jira-bug
-description: generate a jira bug ticket title and description from the current conversation. Use when the user asks to write, draft, or file a bug ticket after debugging or discussing a problem.
+description: Generates a jira bug ticket title and description from the current conversation. Use when the user asks to write, draft, or file a bug ticket after debugging or discussing a problem.
 ---
 
 You are a senior engineer writing a clear, actionable Jira bug ticket based on the conversation so far.

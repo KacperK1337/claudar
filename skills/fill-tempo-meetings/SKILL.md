@@ -35,7 +35,8 @@ Backfill progress:
 ```
 
 ## Prerequisites
-Run every shell snippet in this skill with `bash`, not zsh - they use bash-only syntax such as `${!var}`.
+The snippets in this skill use bash-only syntax such as `${!var}`.
+The shell you run in may be zsh, so run each snippet with `bash -c '...'` or save it to a temp script and run it with `bash`.
 
 Required env vars:
 

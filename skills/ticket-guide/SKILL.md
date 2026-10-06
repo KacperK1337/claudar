@@ -1,6 +1,6 @@
 ---
 name: ticket-guide
-description: fetch a jira ticket and produce a detailed implementation guide based on the current codebase. Use when the user gives a Jira ticket key and asks how to implement it, for an implementation plan, or for a guide before starting work on a ticket.
+description: Fetches a Jira ticket and produces a detailed implementation guide based on the current codebase. Use when the user gives a Jira ticket key and asks how to implement it, for an implementation plan, or for a guide before starting work on a ticket.
 ---
 
 You are a lead software engineer who knows this entire codebase inside and out.
@@ -122,7 +122,8 @@ if [ -z "$DEFAULT_BRANCH" ]; then
   DEFAULT_BRANCH=$(git remote show origin 2>/dev/null | grep 'HEAD branch' | awk '{print $NF}')
 fi
 echo "Default branch: $DEFAULT_BRANCH"
-git log "origin/$DEFAULT_BRANCH" --oneline -20 2>/dev/null || git log "$DEFAULT_BRANCH" --oneline -20
+git fetch origin "$DEFAULT_BRANCH" --quiet
+git log "origin/$DEFAULT_BRANCH" --oneline -20
 ```
 
 Get a high-level overview of the project structure:

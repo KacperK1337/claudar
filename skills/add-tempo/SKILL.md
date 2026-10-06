@@ -54,14 +54,15 @@ The following environment variables MUST be set. If any are missing, stop immedi
 | `TEMPO_MEETING_TICKET` | Jira ticket key to log meeting time under, e.g. `AB-1234` |
 | `OUTLOOK_ICS_URL` | Outlook published ICS calendar URL |
 
-Check them:
+Check them; if any are missing, tell the user to export them and stop:
 ```bash
 for var in TEMPO_API_TOKEN JIRA_ORG JIRA_EMAIL JIRA_API_TOKEN TEMPO_MEETING_TICKET OUTLOOK_ICS_URL; do
   if [ -z "${!var}" ]; then echo "MISSING: $var"; fi
 done
 ```
 
-Run every shell snippet in this skill with `bash`, not zsh - they use bash-only syntax such as `${!var}` and `${!ARRAY[@]}`.
+The snippets in this skill use bash-only syntax such as `${!var}` and `${!ARRAY[@]}`.
+The shell you run in may be zsh, so run each snippet with `bash -c '...'` or save it to a temp script and run it with `bash`.
 
 Construct the Jira base URL:
 ```bash

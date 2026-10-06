@@ -68,7 +68,7 @@ Run fetches in parallel where possible.
 
 **Jira ticket (key or URL):**
 
-Prefer MCP Atlassian tools — use `mcp__claude_ai_Atlassian__getJiraIssue` with the ticket key.
+Prefer MCP Atlassian tools — use `Atlassian:getJiraIssue` with the ticket key.
 If MCP is unavailable, fall back to curl.
 
 Check for `JIRA_ORG` first:
@@ -118,7 +118,7 @@ Extract: title, PR body, changed file list.
 
 **Confluence URL:**
 
-Prefer MCP `mcp__claude_ai_Atlassian__getConfluencePage`.
+Prefer MCP `Atlassian:getConfluencePage`.
 Fallback: `curl -s <url>` and extract visible text.
 
 **Generic URL:**

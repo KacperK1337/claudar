@@ -20,7 +20,7 @@ Intermittent 500 on POST /orders when cart contains a discounted item
 ## Description
 
 ### Summary
-Placing an order right after creating a cart with a discounted item fails with a 500 about 1 time in 5.
+Placing an order right after creating a cart with a discounted item fails with a 500 in 1-3 of 10 attempts.
 
 ### Root Cause
 Discount lookup races with cart serialization; null is read before the discount worker finishes writing.
