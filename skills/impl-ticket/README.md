@@ -107,14 +107,14 @@ there is a partial attempt in branch feat/old-discount, do not reuse it
 ```
 
 ## What happens when you run it
-1. It reads the ticket through the Atlassian MCP (or the Jira REST API when the MCP is not connected): description, acceptance criteria, all comments (every page, not just the first 20), every linked ticket, subtasks, the parent, and linked Confluence pages.
+1. It reads the ticket through the Atlassian MCP (or the Jira REST API when the MCP is not connected): description, acceptance criteria, all comments (every page), the parent, subtasks, linked tickets that block or duplicate it (plus loosely related ones only when they touch the scope), and linked Confluence pages.
 2. It classifies the work.
    For a spike, research, or documentation ticket it stops, changes nothing, and tells you what the ticket needs - unless your extra info says what to do with it.
 3. It merges everything into one scope, with later comment decisions winning over the description and work owned by linked tickets left out.
    It shows you the scope and keeps going; it only stops to ask if two readings of the ticket would lead to different code.
-4. It checks which branch you are on before creating one, since you may have made it already.
-   - Branch name contains the ticket key, or it is a fresh branch with no commits yet: it stays on it.
-   - On the default branch: it switches to a branch named exactly after the ticket key (e.g. `ABC-4221`), creating it if needed.
+4. It checks that the ticket's code lives in this repo, then which branch you are on before creating one, since you may have made it already.
+   - Branch name contains the exact ticket key (`ABC-12` does not match `ABC-123`), or it is a fresh branch with no commits yet: it stays on it.
+   - On the default branch: it fetches it and switches to a branch named exactly after the ticket key (e.g. `ABC-4221`), creating it from the latest remote version if needed.
    - On some other branch with its own commits: it asks you.
 
    If you have uncommitted changes, it asks before going on.
@@ -130,7 +130,7 @@ there is a partial attempt in branch feat/old-discount, do not reuse it
 
 ## Safety guarantees
 - Nothing is committed, pushed, or opened as a PR.
-  The only git write is `git add` for files the skill itself created.
+  The only git writes are fetching and creating or switching to the ticket branch, `git add` for files the skill itself created, and a short `git stash` to prove a regression test fails without the fix.
 - Branches are never renamed, deleted, or reset.
 - Nothing is written to Jira or Confluence: no comments, no status changes.
 - For spike, research, and documentation tickets nothing is changed anywhere unless your extra info says what to do.
