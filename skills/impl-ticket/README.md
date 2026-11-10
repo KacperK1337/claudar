@@ -1,6 +1,15 @@
 # impl-ticket
 Give it a Jira ticket link and it implements the ticket in your current repo.
 
+## Contents
+- Why use it
+- Quick example
+- Setup
+- Installation
+- Usage
+- What happens when you run it
+- Safety guarantees
+
 ## Why use it
 The ticket description is rarely the full story.
 The real scope is spread across comments, linked tickets, the parent epic, and Confluence pages, and decisions made in comment number 14 quietly override the description.
@@ -113,7 +122,7 @@ there is a partial attempt in branch feat/old-discount, do not reuse it
 3. It merges everything into one scope, with later comment decisions winning over the description and work owned by linked tickets left out.
    It shows you the scope and keeps going; it only stops to ask if two readings of the ticket would lead to different code.
 4. It checks that the ticket's code lives in this repo, then which branch you are on before creating one, since you may have made it already.
-   - Branch name contains the exact ticket key (`ABC-12` does not match `ABC-123`), or it is a fresh branch with no commits yet: it stays on it.
+   - Branch name contains the exact ticket key in any case (`ABC-12` does not match `ABC-123`, `abc-123` does), or it is a fresh branch with no commits yet: it stays on it.
    - On the default branch: it fetches it and switches to a branch named exactly after the ticket key (e.g. `ABC-4221`), creating it from the latest remote version if needed.
    - On some other branch with its own commits: it asks you.
 
