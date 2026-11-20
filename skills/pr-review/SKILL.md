@@ -6,6 +6,9 @@ description: Does a deep, harsh code review of a github pull request (by number,
 You are a senior staff engineer performing a ruthless, in-depth code review. You know this codebase inside and out.
 Your job is to protect its quality, consistency, and maintainability.
 
+The review is read-only: do not check out branches, commit, edit files, or post comments or reviews to GitHub.
+The only command that changes local state is `git fetch`, used to read the latest PR code.
+
 Requires the `gh` CLI, authenticated, and `git`.
 For Jira context, either the Atlassian MCP connected, or `curl` with `JIRA_ORG` (plus `JIRA_EMAIL` and `JIRA_API_TOKEN` if the Jira site requires auth).
 
@@ -130,15 +133,8 @@ else
 fi
 ```
 
-Fetch the ticket:
-
-```bash
-curl -s -w "\n%{http_code}" "${JIRA_URL}/rest/api/2/issue/${TICKET_KEY}?fields=summary,description,issuetype,priority,labels,components,acceptance" \
-  -H "Accept: application/json"
-```
-
-The last line of the output is the HTTP status code, the rest is the response body.
-If the status code is 401 or 403, retry with Basic auth:
+Fetch the ticket.
+If `JIRA_EMAIL` and `JIRA_API_TOKEN` are both set, send Basic auth on the first request:
 
 ```bash
 curl -s -w "\n%{http_code}" "${JIRA_URL}/rest/api/2/issue/${TICKET_KEY}?fields=summary,description,issuetype,priority,labels,components,acceptance" \
@@ -146,10 +142,19 @@ curl -s -w "\n%{http_code}" "${JIRA_URL}/rest/api/2/issue/${TICKET_KEY}?fields=s
   -u "${JIRA_EMAIL}:${JIRA_API_TOKEN}"
 ```
 
-If authentication is still required but credentials are missing, set:
+Otherwise send it without auth:
+
+```bash
+curl -s -w "\n%{http_code}" "${JIRA_URL}/rest/api/2/issue/${TICKET_KEY}?fields=summary,description,issuetype,priority,labels,components,acceptance" \
+  -H "Accept: application/json"
+```
+
+The last line of the output is the HTTP status code, the rest is the response body.
+Without auth, Jira Cloud answers 401, 403, or 404 for an issue in a private project, so a 404 does not prove the ticket is missing.
+If the request without auth gets 401, 403, or 404, set:
 
 ```
-JIRA_FETCH_FAILED="auth required but JIRA_EMAIL/JIRA_API_TOKEN not set"
+JIRA_FETCH_FAILED="ticket not found, or auth required but JIRA_EMAIL/JIRA_API_TOKEN not set"
 ```
 
 If both options fail: set `JIRA_FETCH_FAILED` with a short reason and proceed. Do not stop.
@@ -164,7 +169,8 @@ gh pr diff <pr-number> --name-only
 ```
 
 Read changed files at the PR head, not at a stale local commit.
-If `git rev-parse HEAD` equals `headRefOid`, read the working tree.
+If `git rev-parse HEAD` equals `headRefOid` and `git status --porcelain` prints nothing, read the working tree.
+Uncommitted local edits are not part of the PR, so never review them.
 Otherwise fetch the PR head and read files with `git show <headRefOid>:<path>`:
 ```bash
 git fetch origin "pull/<pr-number>/head" --quiet
