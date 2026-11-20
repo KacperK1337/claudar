@@ -2,17 +2,16 @@
 Senior-engineer-grade code review of a GitHub Pull Request, picked by number, branch, or your current branch.
 
 ## Why use it
-GitHub's own review UI is fine for spotting typos. 
-It doesn't catch the kinds of issues a staff engineer would: subtle correctness bugs, missing error paths, code that ignores existing utilities in the repo, brittle tests, security holes, sloppy naming that bleeds into public APIs. 
-This skill reads the PR, reads the surrounding codebase, and gives you the kind of review that hurts a little - on purpose.
+Use it to review a Pull Request that is already open - mostly ones from other people, but it works on your own too.
+It reads the PR, reads the surrounding codebase, and catches the kinds of issues a staff engineer would: subtle correctness bugs, missing error paths, code that ignores existing utilities in the repo, brittle tests, security holes, sloppy naming that bleeds into public APIs.
+The review hurts a little - on purpose.
 It also checks what other reviewers (people and Copilot) already said, and tells you which of their points still stand.
 
-Use it before you hit "Approve", or on your own PR before asking for reviews.
 The branch must have an open PR - without one, the skill stops.
 
 ## Quick example
 ```text
-/pr-review 1234
+/pr-review feat/checkout-inventory-lock
 ```
 
 You get back two lists, each sorted by severity (critical first, then major, then minor):
