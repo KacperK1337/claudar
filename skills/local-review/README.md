@@ -1,4 +1,4 @@
-# pre-review
+# local-review
 Senior-engineer-grade code review of a local branch, before you open a Pull Request.
 
 ## Why use it
@@ -8,7 +8,7 @@ It reads the changes, reads the surrounding codebase, and catches subtle correct
 
 ## Quick example
 ```text
-/pre-review
+/local-review
 ```
 
 You get back one list, sorted by severity (critical first, then major, then minor):
@@ -29,8 +29,8 @@ You decide what to do with the list.
 
 You can steer the review with extra context:
 ```text
-/pre-review focus on security and backward compatibility
-/pre-review feat/add-new-api this area is performance-sensitive
+/local-review focus on security and backward compatibility
+/local-review feat/add-new-api this area is performance-sensitive
 ```
 
 ## Setup
@@ -39,13 +39,13 @@ You need:
 
 ## Installation
 ```bash
-./install.sh pre-review
+./install.sh local-review
 ```
 
 ## Usage
 Basic shape:
 ```text
-/pre-review [branch-name|HEAD] [additional context]
+/local-review [branch-name|HEAD] [additional context]
 ```
 
 The selector is optional.
@@ -53,16 +53,16 @@ If the first word is not `HEAD` or an existing branch, the skill reviews your cu
 
 Examples:
 ```text
-/pre-review
-/pre-review focus on performance
-/pre-review HEAD
-/pre-review feat/add-new-api
-/pre-review feat/add-new-api already caused regressions before, look hard
+/local-review
+/local-review focus on performance
+/local-review HEAD
+/local-review feat/add-new-api
+/local-review feat/add-new-api already caused regressions before, look hard
 ```
 
 Multiline context works too:
 ```text
-/pre-review focus on API compatibility
+/local-review focus on API compatibility
 pay extra attention to auth and caching changes
 ignore cosmetic naming nits unless they affect clarity
 ```

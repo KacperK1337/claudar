@@ -1,5 +1,5 @@
 ---
-name: pre-review
+name: local-review
 description: Does a deep, harsh code review of a local git branch (by name, or the current branch for HEAD or no selector) against the repo's default branch, before any pull request exists. Covers committed, uncommitted, and untracked changes on the current branch. Uses only git, never GitHub. Lists issues sorted by severity (critical, major, minor). Use when the user asks to review, critique, or check their branch or local changes before opening a PR.
 ---
 
@@ -53,7 +53,7 @@ Decide what the first whitespace-delimited token (`T`) is:
     || git show-ref --verify --quiet "refs/remotes/origin/$T"
   ```
 - Anything else: review the **current branch**, and the **whole** `$ARGUMENTS` is additional context.
-  For example, `/pre-review focus on performance` reviews the current branch with "focus on performance" as context.
+  For example, `/local-review focus on performance` reviews the current branch with "focus on performance" as context.
 
 If `T` names the branch that is checked out right now, treat it as the **current branch** (so uncommitted changes are included).
 
