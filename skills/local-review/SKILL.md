@@ -8,17 +8,18 @@ Your job is to protect its quality, consistency, and maintainability.
 
 Requires `git`.
 Do not use `gh` or the GitHub API at any point - this review is for code that has no PR yet.
+Do not edit, stage, commit, stash, or check out anything; the only allowed write is `git fetch` in Step 1.
 For Jira context, either the Atlassian MCP connected, or `curl` with `JIRA_ORG` (plus `JIRA_EMAIL` and `JIRA_API_TOKEN` if the Jira site requires auth).
 
 ## Contents
 - Progress checklist
 - Input handling
 - Step 1: Resolve the branch and base
-- Step 2: Jira ticket context
+- Step 2: Jira ticket context (automatic)
 - Step 3: Get the diff
 - Step 4: Deep codebase analysis
 - Step 5: Write the review
-- Review criteria
+- Review criteria - check all of these
 - Output rules
 - Final check
 
@@ -69,10 +70,13 @@ Before proceeding, present a short input summary:
 
 ## Step 1: Resolve the branch and base
 
-For the current branch, get its name:
+Shell variables do not carry over between separate commands.
+Each snippet below prints the value it finds; put that value into the later commands, or run dependent snippets in one command.
+
+For the current branch, get its name (`BRANCH`):
 
 ```bash
-BRANCH=$(git rev-parse --abbrev-ref HEAD)
+git rev-parse --abbrev-ref HEAD
 ```
 
 If `BRANCH` is `HEAD` (detached HEAD), stop and tell the user to check out a branch or pass a branch name.
@@ -90,6 +94,7 @@ if [ -z "$BASE" ]; then
     git show-ref --verify --quiet "refs/remotes/origin/$b" && BASE=$b && break
   done
 fi
+echo "BASE=$BASE"
 ```
 
 If `BASE` is still empty, stop and tell the user the default branch could not be found (`git remote set-head origin --auto` fixes it).
@@ -104,7 +109,13 @@ If the fetch fails (offline, no access), go on with the local `origin/$BASE` and
 
 If the branch being reviewed is `BASE` itself, stop and tell the user there is nothing to compare: check out or pass a feature branch.
 
-Present a short summary of the target before proceeding: branch, `REF`, and `origin/<BASE>`.
+Count the commits ahead of the base, for the review header:
+
+```bash
+git rev-list --count "origin/$BASE..$REF"
+```
+
+Present a short summary of the target before proceeding: branch, `REF`, `origin/<BASE>`, and commits ahead.
 
 ## Step 2: Jira ticket context (automatic)
 
@@ -137,8 +148,10 @@ Resolve the Jira base URL from `JIRA_ORG`:
 ```bash
 if [ -z "$JIRA_ORG" ]; then
   JIRA_FETCH_FAILED="JIRA_ORG env var not set — cannot construct Jira URL"
+  echo "JIRA_FETCH_FAILED=$JIRA_FETCH_FAILED"
 else
   JIRA_URL="https://${JIRA_ORG}.atlassian.net"
+  echo "JIRA_URL=$JIRA_URL"
 fi
 ```
 
@@ -177,6 +190,8 @@ git diff "$MB"
 git diff "$MB" --name-only
 git ls-files --others --exclude-standard
 ```
+
+Run these in one command, since `MB` does not carry over to a new one.
 
 `git diff "$MB"` compares the merge base with the working tree, so it covers commits on the branch plus staged and unstaged edits.
 Untracked files are not in that diff: treat each one as a new file and read it in full.
@@ -226,7 +241,7 @@ Do **not** give a verdict (no approve, reject, or "ready to merge").
 1. (<Critical|Major|Minor>) `path/file.ts:42` - <problem>. <fix>.
 ```
 
-Severity, shown in brackets before each issue:
+Severity, shown in parentheses before each issue:
 - **Critical** - must be fixed before opening a PR: bugs, data loss, security holes, broken behavior, secrets about to be committed.
   If `JIRA_CONTEXT` has substantive content (non-empty description or AC), a requirement clearly stated in the ticket and completely absent from the change is Critical, tagged `[Jira: KEY]`.
 - **Major** - should be fixed: design problems, likely bugs, performance problems, missing tests for risky code, convention violations that will spread, reinvented utilities.
@@ -301,13 +316,10 @@ List rules:
 
 ## Output rules
 
-Be specific. Reference file paths and line numbers. Quote code snippets when pointing out issues. Do not be vague - every observation must be actionable.
-Do not produce long essays - be concise and to the point. The goal is to give clear, actionable feedback the author can act on before opening a PR.
+Reference file paths and line numbers, and quote code snippets when pointing out issues.
+Every observation must be actionable, with no long essays.
 
-Never ignore additional review context. Either:
-
-- incorporate it into the review, or
-- explicitly explain why it should not change the review.
+Never ignore additional review context: incorporate it, or explain why it should not change the review.
 
 If `JIRA_FETCH_FAILED` is set, append this note at the very end of the review (after all sections):
 
@@ -319,7 +331,7 @@ Before sending the review, verify:
 1. There is no verdict anywhere (no approve, reject, or "ready to merge").
 2. No `gh` command or GitHub API call was used.
 3. The single Issues list is present, and says `None.` if empty.
-4. Every issue has a severity in brackets and names a file path and line numbers, and the list is sorted Critical, then Major, then Minor, with no severity sub-headings.
+4. Every issue has a severity in parentheses and names a file path and line numbers, and the list is sorted Critical, then Major, then Minor, with no severity sub-headings.
 5. For the current branch, uncommitted and untracked files were reviewed too.
 6. Additional review context is incorporated or explicitly explained away.
 7. Ticket-based findings are tagged `[Jira: KEY]`.

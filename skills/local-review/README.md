@@ -86,7 +86,7 @@ For the current branch, that includes commits, staged and unstaged edits, and un
 6. It also looks for things that should not be pushed: debug leftovers, new TODOs, secrets, and stray untracked files.
 7. Any extra context you passed shapes emphasis (security, performance, backward compatibility, etc.).
 8. It writes the review as one **Issues** list.
-Each issue has its severity in brackets (`Critical`, `Major`, or `Minor`), and the list is sorted critical first, then major, then minor.
+Each issue has its severity in parentheses (`Critical`, `Major`, or `Minor`), and the list is sorted critical first, then major, then minor.
 Issues in uncommitted or untracked files are marked as such.
 Ticket-based findings are tagged `[Jira: KEY]`.
 9. Before sending, it checks the review (no verdict, no GitHub calls, list sorted by severity, file and line references, uncommitted files covered, extra context handled, Jira tags) and fixes it if a check fails.
