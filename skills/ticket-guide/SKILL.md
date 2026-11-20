@@ -79,28 +79,35 @@ curl -s -w "\n%{http_code}" "${JIRA_URL}/browse/$1"
 ```
 
 The last line of the output is the HTTP status code, the rest is the response body.
-If you cannot extract meaningful ticket data, try fetching via the Jira REST API:
+If you cannot extract meaningful ticket data, try fetching via the Jira REST API.
+Send Basic auth when `JIRA_EMAIL` and `JIRA_API_TOKEN` are set, since Jira Cloud often answers a call without auth with 404 for a private ticket instead of 401/403:
 
 ```bash
-curl -s -w "\n%{http_code}" "${JIRA_URL}/rest/api/2/issue/$1?fields=summary,description,issuetype,priority,labels,components" \
-  -H "Accept: application/json"
+URL="https://${JIRA_ORG}.atlassian.net/rest/api/2/issue/$1?fields=summary,description,issuetype,priority,labels,components"
+if [ -n "$JIRA_EMAIL" ] && [ -n "$JIRA_API_TOKEN" ]; then
+  echo "AUTH=yes"
+  curl -s -w "\n%{http_code}" "$URL" -H "Accept: application/json" -u "${JIRA_EMAIL}:${JIRA_API_TOKEN}"
+else
+  echo "AUTH=no"
+  curl -s -w "\n%{http_code}" "$URL" -H "Accept: application/json"
+fi
 ```
 
-If the status code is 401 or 403, authentication is required.
-When `JIRA_EMAIL` and `JIRA_API_TOKEN` are set, retry the same request with Basic auth by adding `-u "${JIRA_EMAIL}:${JIRA_API_TOKEN}"`.
-If they are not set, or the retry still fails, inform the user they need to set up credentials (`JIRA_API_TOKEN` and `JIRA_EMAIL` env vars):
+If the status code is 401, 403, or 404 with `AUTH=no`, inform the user they need to set up credentials (`JIRA_API_TOKEN` and `JIRA_EMAIL` env vars):
 ```bash
 export JIRA_API_TOKEN=<your_token>
 export JIRA_EMAIL=<your_email>
 ```
 and then stop.
+If the status code is 401 or 403 with `AUTH=yes`, tell the user Jira rejected `JIRA_EMAIL`/`JIRA_API_TOKEN`, and stop.
+If it is 404 with `AUTH=yes`, tell the user the ticket was not found, or they have no access to its project, and stop.
 
 Extract and note:
 
 - ticket number
 - title
 - description
-- acceptance criteria (if any)
+- acceptance criteria (if any): they exist only in the description and may not be labeled; look for a section headed "AC" or "Acceptance criteria", or a list of "should ...", "must ...", or given/when/then lines
 - issue type
 - priority
 

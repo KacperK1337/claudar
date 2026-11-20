@@ -139,13 +139,15 @@ If no reference is found, skip this step entirely and proceed to Step 3.
 If a reference is found, extract the ticket key and attempt to fetch the ticket.
 **This step must never block the review.**
 If fetching fails for any reason, record the failure reason as `JIRA_FETCH_FAILED` and proceed to Step 3.
-If Jira says the key does not exist (MCP "not found", or HTTP 404 on a call with auth), treat it as not a ticket: skip the rest of this step and do not set `JIRA_FETCH_FAILED`.
+A "not found" answer does not prove the key is missing: Jira gives the same answer for a ticket in a project you cannot see.
+So treat it as a fetch failure, never as "no ticket".
 
 **Option 1 — Atlassian MCP (preferred when connected):**
 
 If the `Atlassian:getJiraIssue` tool is available, use it with the ticket key.
 It needs a `cloudId`: call `Atlassian:getAccessibleAtlassianResources` once and use the returned id.
 No environment variables are needed.
+If it says the ticket is not found, record `JIRA_FETCH_FAILED=not found or no access to this project` and skip Option 2.
 Extract: key, summary, description, issue type.
 
 **Option 2 — curl fallback (when MCP is not connected or fails):**
@@ -171,7 +173,7 @@ fi
 The last line of the output is the HTTP status code, the rest is the response body.
 Read the result by status code:
 - 200: the ticket is fetched.
-- 404 with `AUTH=yes`: the key does not exist, so it is not a ticket (see above).
+- 404 with `AUTH=yes`: `JIRA_FETCH_FAILED=not found or no access to this project`.
 - 404 with `AUTH=no`: `JIRA_FETCH_FAILED=not found or no access - JIRA_EMAIL/JIRA_API_TOKEN not set`.
 - 401 or 403 with `AUTH=no`: `JIRA_FETCH_FAILED=auth required but JIRA_EMAIL/JIRA_API_TOKEN not set`.
 - 401 or 403 with `AUTH=yes`: `JIRA_FETCH_FAILED=Jira rejected JIRA_EMAIL/JIRA_API_TOKEN`.

@@ -87,7 +87,10 @@ Fetch all of the following before deciding anything:
    For a bare key, the `cloudId` comes from one call to `Atlassian:getAccessibleAtlassianResources`.
    If it returns more than one site, use the one matching `<JIRA_ORG>.atlassian.net` when `JIRA_ORG` is set; otherwise ask the user which site.
    If a tool named here is missing, use `Atlassian:discover` to find the matching operation and run it with `Atlassian:executeRead`.
-   Note: key, summary, issue type, status, priority, labels, components, fix versions, description, acceptance criteria (only in the description, often headed "AC" but not always; if there are none, work out the requirements from the description), parent, subtasks, issue links, attachments.
+   Note: key, summary, issue type, status, priority, labels, components, fix versions, description, acceptance criteria, parent, subtasks, issue links, attachments.
+   Acceptance criteria (AC) exist only in the description, and may not be labeled.
+   Look for a section headed "AC", "Acceptance criteria", or similar, or a list of conditions with no heading, such as "should ...", "must ...", or given/when/then lines.
+   If the description has no clear AC, work out the requirements from the description itself.
 2. **All comments** - `Atlassian:listJiraIssueComments` with `orderBy: "created"`.
    Page with `startAt` until `isLast` is true.
    `getJiraIssue` reports only how many comments there are, not the comments themselves, so always use this call for comments.
@@ -137,18 +140,18 @@ Any other non-2xx status is a fetch failure: stop and report it.
 
 | What | Call |
 |---|---|
-| Ticket, with links, subtasks, parent, and attachments | `jira_get "/rest/api/2/issue/${KEY}?fields=*all"` |
+| Ticket, with links, subtasks, parent, and attachments | `jira_get "/rest/api/2/issue/${KEY}?fields=summary,description,issuetype,status,priority,labels,components,fixVersions,parent,subtasks,issuelinks,attachment"` |
 | Comments, page by page (`startAt` 0, 100, ... until `startAt + maxResults >= total`) | `jira_get "/rest/api/2/issue/${KEY}/comment?orderBy=created&maxResults=100&startAt=0"` |
 | Remote links (Confluence pages, other URLs) | `jira_get "/rest/api/2/issue/${KEY}/remotelink"` |
 | Linked ticket, subtask, or parent | `jira_get "/rest/api/2/issue/${LINKED_KEY}?fields=summary,issuetype,status,description"` |
 | Confluence page (id from the page URL) | `jira_get "/wiki/rest/api/content/${PAGE_ID}?expand=body.storage"` |
 
 Issue links, subtasks, parent, and attachments are in the ticket response under `fields.issuelinks`, `fields.subtasks`, `fields.parent`, and `fields.attachment`.
-The response with `fields=*all` is large: save it to a file and read the parts you need.
+The ticket response can be large: save it to a file and read the parts you need.
 Drop the status line before saving, or the file is not valid JSON:
 
 ```bash
-RESP=$(jira_get "/rest/api/2/issue/${KEY}?fields=*all")
+RESP=$(jira_get "/rest/api/2/issue/${KEY}?fields=summary,description,issuetype,status,priority,labels,components,fixVersions,parent,subtasks,issuelinks,attachment")
 echo "$RESP" | tail -n 1                                   # status code
 echo "$RESP" | sed '$d' > "${TMPDIR:-/tmp}/${KEY}.json"    # body only
 ```

@@ -69,31 +69,29 @@ Run fetches in parallel where possible.
 **Jira ticket (key or URL):**
 
 Prefer MCP Atlassian tools — use `Atlassian:getJiraIssue` with the ticket key.
+It needs a `cloudId`: call `Atlassian:getAccessibleAtlassianResources` once and use the returned id.
 If MCP is unavailable, fall back to curl.
 
-Check for `JIRA_ORG` first:
+The curl snippet uses Basic auth when `JIRA_EMAIL` and `JIRA_API_TOKEN` are set, since Jira Cloud often answers a call without auth with 404 for a private ticket instead of 401/403:
 
 ```bash
 if [ -z "$JIRA_ORG" ]; then
   echo "Warning: JIRA_ORG is not set — skipping Jira fetch. Set it with: export JIRA_ORG=your-org"
   # skip this source, continue with remaining sources
 else
-  JIRA_URL="https://${JIRA_ORG}.atlassian.net"
-  curl -s -w "\n%{http_code}" "${JIRA_URL}/rest/api/2/issue/<KEY>?fields=summary,description,issuetype,priority" \
-    -H "Accept: application/json"
+  URL="https://${JIRA_ORG}.atlassian.net/rest/api/2/issue/<KEY>?fields=summary,description,issuetype,priority"
+  if [ -n "$JIRA_EMAIL" ] && [ -n "$JIRA_API_TOKEN" ]; then
+    echo "AUTH=yes"
+    curl -s -w "\n%{http_code}" "$URL" -H "Accept: application/json" -u "${JIRA_EMAIL}:${JIRA_API_TOKEN}"
+  else
+    echo "AUTH=no"
+    curl -s -w "\n%{http_code}" "$URL" -H "Accept: application/json"
+  fi
 fi
 ```
 
 The last line of the output is the HTTP status code, the rest is the response body.
-If the status code is 401/403, retry with Basic auth using `JIRA_EMAIL` and `JIRA_API_TOKEN`:
-
-```bash
-curl -s -w "\n%{http_code}" "${JIRA_URL}/rest/api/2/issue/<KEY>?fields=summary,description,issuetype,priority" \
-  -H "Accept: application/json" \
-  -u "${JIRA_EMAIL}:${JIRA_API_TOKEN}"
-```
-
-If `JIRA_EMAIL` or `JIRA_API_TOKEN` are missing, inform the user:
+If the status code is 401, 403, or 404 with `AUTH=no`, inform the user:
 
 > Jira authentication failed. Set your credentials and retry:
 > ```
@@ -102,9 +100,14 @@ If `JIRA_EMAIL` or `JIRA_API_TOKEN` are missing, inform the user:
 > ```
 > Alternatively, connect the Atlassian MCP integration to skip credentials entirely.
 
-Then continue with remaining sources — do not stop.
+If the status code is 401 or 403 with `AUTH=yes`, tell the user Jira rejected `JIRA_EMAIL`/`JIRA_API_TOKEN`.
+If it is 404 with `AUTH=yes`, tell the user the ticket was not found, or they have no access to its project.
+In every failure case, continue with remaining sources — do not stop.
 
 Extract: title, description, acceptance criteria, issue type.
+Acceptance criteria (AC) exist only in the description, and may not be labeled.
+Look for a section headed "AC", "Acceptance criteria", or similar, or a list of conditions with no heading, such as "should ...", "must ...", or given/when/then lines.
+If the description has no clear AC, work out the requirements from the description itself.
 
 **GitHub PR URL:**
 
