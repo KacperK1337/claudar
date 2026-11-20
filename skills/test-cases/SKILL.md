@@ -79,7 +79,7 @@ if [ -z "$JIRA_ORG" ]; then
   # skip this source, continue with remaining sources
 else
   JIRA_URL="https://${JIRA_ORG}.atlassian.net"
-  curl -s -w "\n%{http_code}" "${JIRA_URL}/rest/api/2/issue/<KEY>?fields=summary,description,acceptance,issuetype,priority" \
+  curl -s -w "\n%{http_code}" "${JIRA_URL}/rest/api/2/issue/<KEY>?fields=summary,description,issuetype,priority" \
     -H "Accept: application/json"
 fi
 ```
@@ -88,7 +88,7 @@ The last line of the output is the HTTP status code, the rest is the response bo
 If the status code is 401/403, retry with Basic auth using `JIRA_EMAIL` and `JIRA_API_TOKEN`:
 
 ```bash
-curl -s -w "\n%{http_code}" "${JIRA_URL}/rest/api/2/issue/<KEY>?fields=summary,description,acceptance,issuetype,priority" \
+curl -s -w "\n%{http_code}" "${JIRA_URL}/rest/api/2/issue/<KEY>?fields=summary,description,issuetype,priority" \
   -H "Accept: application/json" \
   -u "${JIRA_EMAIL}:${JIRA_API_TOKEN}"
 ```

@@ -110,17 +110,21 @@ References look like:
   In the branch name, match it ignoring case (e.g. `feature/proj-123-login`) and uppercase the key before fetching.
 - Jira browse URL: pattern `*.atlassian.net/browse/*`
 
+Ignore matches that are clearly not tickets, such as `UTF-8`, `SHA-256`, or `ISO-8601`.
+
 If no reference is found, skip this step entirely and proceed to Step 3.
 
 If a reference is found, extract the ticket key and attempt to fetch the ticket.
 **This step must never block the review.**
 If fetching fails for any reason, record the failure reason as `JIRA_FETCH_FAILED` and proceed to Step 3.
+If Jira says the key does not exist (MCP "not found", or HTTP 404 on a request that sent auth), treat it as not a ticket: skip the rest of this step and do not set `JIRA_FETCH_FAILED`.
 
 **Option 1 — Atlassian MCP (preferred when connected):**
 
-If the `Atlassian:getJiraIssue` tool is available, call it directly with the ticket key.
+If the `Atlassian:getJiraIssue` tool is available, use it with the ticket key.
+It needs a `cloudId`: call `Atlassian:getAccessibleAtlassianResources` once and use the returned id.
 No environment variables are needed.
-Extract: key, summary, description, any acceptance criteria, issue type.
+Extract: key, summary, description, issue type.
 
 **Option 2 — curl fallback (when MCP is not connected or fails):**
 
@@ -138,7 +142,7 @@ Fetch the ticket.
 If `JIRA_EMAIL` and `JIRA_API_TOKEN` are both set, send Basic auth on the first request:
 
 ```bash
-curl -s -w "\n%{http_code}" "${JIRA_URL}/rest/api/2/issue/${TICKET_KEY}?fields=summary,description,issuetype,priority,labels,components,acceptance" \
+curl -s -w "\n%{http_code}" "${JIRA_URL}/rest/api/2/issue/${TICKET_KEY}?fields=summary,description,issuetype,priority,labels,components" \
   -H "Accept: application/json" \
   -u "${JIRA_EMAIL}:${JIRA_API_TOKEN}"
 ```
@@ -146,7 +150,7 @@ curl -s -w "\n%{http_code}" "${JIRA_URL}/rest/api/2/issue/${TICKET_KEY}?fields=s
 Otherwise send it without auth:
 
 ```bash
-curl -s -w "\n%{http_code}" "${JIRA_URL}/rest/api/2/issue/${TICKET_KEY}?fields=summary,description,issuetype,priority,labels,components,acceptance" \
+curl -s -w "\n%{http_code}" "${JIRA_URL}/rest/api/2/issue/${TICKET_KEY}?fields=summary,description,issuetype,priority,labels,components" \
   -H "Accept: application/json"
 ```
 
@@ -159,6 +163,12 @@ JIRA_FETCH_FAILED="ticket not found, or auth required but JIRA_EMAIL/JIRA_API_TO
 ```
 
 If both options fail: set `JIRA_FETCH_FAILED` with a short reason and proceed. Do not stop.
+
+**Finding the acceptance criteria (both options):**
+
+Acceptance criteria (AC) exist only in the description, and may not be labeled.
+Look for a section headed "AC", "Acceptance criteria", or similar, or a list of conditions with no heading, such as "should ...", "must ...", or given/when/then lines.
+If the description has no clear AC, work out the requirements from the description itself.
 
 If the ticket is fetched: store the data as `JIRA_CONTEXT` and note the ticket key.
 

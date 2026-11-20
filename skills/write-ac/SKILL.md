@@ -89,7 +89,7 @@ JIRA_URL="https://${JIRA_ORG}.atlassian.net"
 Fetch the ticket:
 
 ```bash
-curl -s -w "\n%{http_code}" "${JIRA_URL}/rest/api/2/issue/${TICKET_KEY}?fields=summary,description,issuetype,priority,labels,components,acceptance" \
+curl -s -w "\n%{http_code}" "${JIRA_URL}/rest/api/2/issue/${TICKET_KEY}?fields=summary,description,issuetype,priority,labels,components" \
   -H "Accept: application/json"
 ```
 
@@ -97,7 +97,7 @@ The last line of the output is the HTTP status code, the rest is the response bo
 If the status code is 401 or 403, retry with Basic auth:
 
 ```bash
-curl -s -w "\n%{http_code}" "${JIRA_URL}/rest/api/2/issue/${TICKET_KEY}?fields=summary,description,issuetype,priority,labels,components,acceptance" \
+curl -s -w "\n%{http_code}" "${JIRA_URL}/rest/api/2/issue/${TICKET_KEY}?fields=summary,description,issuetype,priority,labels,components" \
   -H "Accept: application/json" \
   -u "${JIRA_EMAIL}:${JIRA_API_TOKEN}"
 ```

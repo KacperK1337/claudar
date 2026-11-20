@@ -82,7 +82,7 @@ The last line of the output is the HTTP status code, the rest is the response bo
 If you cannot extract meaningful ticket data, try fetching via the Jira REST API:
 
 ```bash
-curl -s -w "\n%{http_code}" "${JIRA_URL}/rest/api/2/issue/$1?fields=summary,description,issuetype,priority,labels,components,acceptance" \
+curl -s -w "\n%{http_code}" "${JIRA_URL}/rest/api/2/issue/$1?fields=summary,description,issuetype,priority,labels,components" \
   -H "Accept: application/json"
 ```
 
