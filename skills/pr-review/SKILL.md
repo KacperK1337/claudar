@@ -79,7 +79,7 @@ For the current branch, get its name first:
 BRANCH=$(git rev-parse --abbrev-ref HEAD)
 ```
 
-If `BRANCH` is `HEAD` (detached HEAD) and no PR number was given, stop and tell the user to check out a branch or pass a PR number.
+If `BRANCH` is `HEAD` (detached HEAD) and no PR number or branch name was given, stop and tell the user to check out a branch or pass a PR number.
 
 Look for the PR:
 
@@ -106,7 +106,8 @@ Present a short summary of the target before proceeding.
 Scan the PR title, PR description, and source branch name for Jira ticket references.
 
 References look like:
-- Bare ticket key: pattern `[A-Z]+-[0-9]+` (e.g. `PROJ-123`)
+- Bare ticket key: pattern `[A-Z]+-[0-9]+` (e.g. `PROJ-123`).
+  In the branch name, match it ignoring case (e.g. `feature/proj-123-login`) and uppercase the key before fetching.
 - Jira browse URL: pattern `*.atlassian.net/browse/*`
 
 If no reference is found, skip this step entirely and proceed to Step 3.

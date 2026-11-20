@@ -93,7 +93,7 @@ Open a PR first, or pass a PR number.
 ## What happens when you run it
 1. The skill resolves your input to a PR and fetches the metadata and the full diff.
 If there is no PR, it stops here.
-2. If the PR title, description, or branch name contain a Jira ticket key (`PROJ-123`) or a Jira browse URL, the skill fetches that ticket and uses it to check the change does what was asked.
+2. If the PR title, description, or branch name contain a Jira ticket key (`PROJ-123`, or `proj-123` in a branch name) or a Jira browse URL, the skill fetches that ticket and uses it to check the change does what was asked.
 Fetch uses the Atlassian MCP integration if connected, otherwise falls back to `curl` with `JIRA_ORG`/`JIRA_EMAIL`/`JIRA_API_TOKEN`.
 If the ticket cannot be fetched, the review still goes on and a note is added at the end.
 3. It fetches all PR comments: inline code comments with their replies, review summaries, and general conversation comments, from people and from Copilot.
