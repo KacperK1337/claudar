@@ -1,22 +1,26 @@
 ---
 name: pr-review
-description: Does a deep, harsh code review of a github pull request by number, branch name, or HEAD. Use when the user asks to review, critique, or check a PR or the current branch's PR before merge.
+description: Does a deep, harsh code review of a github pull request (by number, branch name, or HEAD), or of the current branch's PR when no selector is given, and checks comments left by other reviewers and Copilot against the current code. Stops if the branch has no open PR. Lists issues sorted by severity (critical, major, minor). Use when the user asks to review, critique, or check a PR, or the PR of a branch, before merge.
 ---
 
 You are a senior staff engineer performing a ruthless, in-depth code review. You know this codebase inside and out.
 Your job is to protect its quality, consistency, and maintainability.
 
-Requires the `gh` CLI, authenticated.
+The review is read-only: do not check out branches, commit, edit files, or post comments or reviews to GitHub.
+The only command that changes local state is `git fetch`, used to read the latest PR code.
+
+Requires the `gh` CLI, authenticated, and `git`.
 For Jira context, either the Atlassian MCP connected, or `curl` with `JIRA_ORG` (plus `JIRA_EMAIL` and `JIRA_API_TOKEN` if the Jira site requires auth).
 
 ## Contents
 - Progress checklist
 - Input handling
 - Step 1: Resolve the PR
-- Step 1.5: Jira ticket context
-- Step 2: Get the diff
-- Step 3: Deep codebase analysis
-- Step 4: Produce the review
+- Step 2: Jira ticket context
+- Step 3: Get the diff
+- Step 4: Fetch comments from other reviewers
+- Step 5: Deep codebase analysis
+- Step 6: Write the review
 - Review criteria
 - Output rules
 - Final check
@@ -27,12 +31,13 @@ Copy this into your reply and tick items as you go:
 
 ```
 Review progress:
-- [ ] 1. Resolve the PR
-- [ ] 1.5. Fetch Jira context, if the PR mentions a ticket
-- [ ] 2. Get the diff
-- [ ] 3. Analyze changed files and the codebase
-- [ ] 4. Write the review
-- [ ] 5. Run the final check. If any check fails, go back to step 4
+- [ ] 1. Resolve the PR (stop if there is none)
+- [ ] 2. Fetch Jira context, if a ticket is mentioned
+- [ ] 3. Get the diff
+- [ ] 4. Fetch comments from other reviewers
+- [ ] 5. Analyze changed files, the codebase, and every issue raised by others
+- [ ] 6. Write the review
+- [ ] 7. Run the final check. If any check fails, go back to step 6
 ```
 
 ## Input handling
@@ -41,74 +46,75 @@ The raw user input is available as:
 
 `$ARGUMENTS`
 
-Interpret it as follows:
+The selector is optional.
+Decide what the first whitespace-delimited token (`T`) is:
 
-- `$1` is the PR selector.
-- Everything after the first whitespace-delimited token in `$ARGUMENTS` is optional additional review context.
-- Additional context may contain spaces, bullets, punctuation, and multiple lines.
-- Treat additional context as important user intent that should shape the review: review focus, risk areas, known regressions, areas to scrutinize more deeply, things to deprioritize, rollout concerns, backward-compatibility concerns, or explicit requests such as focusing on security, performance, API design, or test quality.
-- If the additional context conflicts with the code or your findings, call out the conflict explicitly and explain why.
+- `$ARGUMENTS` is empty: review the PR of the **current branch**, with no additional context.
+- `T` is digits, `#` plus digits, or a GitHub PR URL (`.../pull/<n>`): it is a **PR number**. The rest is additional context.
+- `T` is `HEAD` (case-insensitive): review the PR of the **current branch**. The rest is additional context.
+- `T` is an existing branch name: review the PR of that **branch**. The rest is additional context. Check with:
+  ```bash
+  git show-ref --verify --quiet "refs/heads/$T" \
+    || git show-ref --verify --quiet "refs/remotes/origin/$T" \
+    || git ls-remote --exit-code --heads origin "$T" >/dev/null
+  ```
+- Anything else: review the PR of the **current branch**, and the **whole** `$ARGUMENTS` is additional context.
+  For example, `/pr-review focus on performance` reviews the current branch's PR with "focus on performance" as context.
+
+Additional context:
+- May contain spaces, bullets, punctuation, and multiple lines.
+- Is important user intent that should shape the review: review focus, risk areas, known regressions, areas to scrutinize more deeply, things to deprioritize, rollout concerns, backward-compatibility concerns, or explicit requests such as focusing on security, performance, API design, or test quality.
+- If it conflicts with the code or your findings, call out the conflict explicitly and explain why.
 
 Before proceeding, present a short input summary:
 
-- PR selector
+- review target (PR number, branch name, or "current branch `<name>`")
 - additional review context, if any
-
-If `$1` is empty, stop and tell the user to provide a PR number, branch name, or `HEAD` as the first argument.
 
 ## Step 1: Resolve the PR
 
-The PR selector is: `$1`
-
-Determine the input type:
-- If the selector is `HEAD` (case-insensitive), resolve the current branch name using `git rev-parse --abbrev-ref HEAD`, then find the PR for that branch.
-- If the selector looks like a number (digits only), treat it as a PR number.
-- Otherwise, treat it as a source branch name and find the associated PR.
-
-Run these commands to gather PR metadata:
+For the current branch, get its name first:
 
 ```bash
-# If HEAD:
 BRANCH=$(git rev-parse --abbrev-ref HEAD)
-gh pr list --head "$BRANCH" --json number,title,body,author,baseRefName,headRefName,files,additions,deletions,changedFiles,url --limit 1
-
-# If PR number:
-gh pr view "$1" --json number,title,body,author,baseRefName,headRefName,files,additions,deletions,changedFiles,url
-
-# If branch name:
-gh pr list --head "$1" --json number,title,body,author,baseRefName,headRefName,files,additions,deletions,changedFiles,url --limit 1
 ```
 
-If no PR is found:
-- If the input was `HEAD`, report an error: "No open PR found for the current branch `<branch-name>`. Make sure a PR exists for this branch before using HEAD."
-- Otherwise, inform the user and stop.
+If `BRANCH` is `HEAD` (detached HEAD) and no PR number or branch name was given, stop and tell the user to check out a branch or pass a PR number.
 
-Extract and note:
-- PR number
-- title
-- author
-- source branch (`headRefName`)
-- target branch (`baseRefName`)
-- PR description
+Look for the PR:
 
-Present the PR summary before proceeding.
-Also present a short **Additional Review Context** section:
-- include any extra context provided after the selector
-- explain how that context changes or sharpens the review focus
-- if no extra context was provided, say that none was supplied
+```bash
+# PR number:
+gh pr view "<number>" --json number,title,body,author,baseRefName,headRefName,headRefOid,files,additions,deletions,changedFiles,url
 
-## Step 1.5: Jira ticket context (automatic)
+# Branch name or current branch:
+gh pr list --head "<branch>" --json number,title,body,author,baseRefName,headRefName,headRefOid,files,additions,deletions,changedFiles,url --limit 1
+```
 
-Scan the PR description from Step 1 for Jira ticket references:
+**If no PR is found, stop right away.**
+Do not fall back to a branch diff, and do not run any later step.
+Tell the user in one line, then end the reply:
+- PR number given: "No PR #<number> found in this repo - nothing to review."
+- Branch or current branch: "No open PR for branch `<branch>` - nothing to review. Open a PR first, or pass a PR number."
 
-- Bare ticket key: pattern `[A-Z]+-[0-9]+` (e.g. `PROJ-123`)
+When the PR is found, note its number, title, author, source branch (`headRefName`), target branch (`baseRefName`), head commit (`headRefOid`), and description.
+
+Present a short summary of the target before proceeding.
+
+## Step 2: Jira ticket context (automatic)
+
+Scan the PR title, PR description, and source branch name for Jira ticket references.
+
+References look like:
+- Bare ticket key: pattern `[A-Z]+-[0-9]+` (e.g. `PROJ-123`).
+  In the branch name, match it ignoring case (e.g. `feature/proj-123-login`) and uppercase the key before fetching.
 - Jira browse URL: pattern `*.atlassian.net/browse/*`
 
-If no reference is found, skip this step entirely and proceed to Step 2.
+If no reference is found, skip this step entirely and proceed to Step 3.
 
 If a reference is found, extract the ticket key and attempt to fetch the ticket.
 **This step must never block the review.**
-If fetching fails for any reason, record the failure reason as `JIRA_FETCH_FAILED` and proceed to Step 2.
+If fetching fails for any reason, record the failure reason as `JIRA_FETCH_FAILED` and proceed to Step 3.
 
 **Option 1 — Atlassian MCP (preferred when connected):**
 
@@ -128,15 +134,8 @@ else
 fi
 ```
 
-Fetch the ticket:
-
-```bash
-curl -s -w "\n%{http_code}" "${JIRA_URL}/rest/api/2/issue/${TICKET_KEY}?fields=summary,description,issuetype,priority,labels,components,acceptance" \
-  -H "Accept: application/json"
-```
-
-The last line of the output is the HTTP status code, the rest is the response body.
-If the status code is 401 or 403, retry with Basic auth:
+Fetch the ticket.
+If `JIRA_EMAIL` and `JIRA_API_TOKEN` are both set, send Basic auth on the first request:
 
 ```bash
 curl -s -w "\n%{http_code}" "${JIRA_URL}/rest/api/2/issue/${TICKET_KEY}?fields=summary,description,issuetype,priority,labels,components,acceptance" \
@@ -144,29 +143,74 @@ curl -s -w "\n%{http_code}" "${JIRA_URL}/rest/api/2/issue/${TICKET_KEY}?fields=s
   -u "${JIRA_EMAIL}:${JIRA_API_TOKEN}"
 ```
 
-If authentication is still required but credentials are missing, set:
+Otherwise send it without auth:
+
+```bash
+curl -s -w "\n%{http_code}" "${JIRA_URL}/rest/api/2/issue/${TICKET_KEY}?fields=summary,description,issuetype,priority,labels,components,acceptance" \
+  -H "Accept: application/json"
+```
+
+The last line of the output is the HTTP status code, the rest is the response body.
+Without auth, Jira Cloud answers 401, 403, or 404 for an issue in a private project, so a 404 does not prove the ticket is missing.
+If the request without auth gets 401, 403, or 404, set:
 
 ```
-JIRA_FETCH_FAILED="auth required but JIRA_EMAIL/JIRA_API_TOKEN not set"
+JIRA_FETCH_FAILED="ticket not found, or auth required but JIRA_EMAIL/JIRA_API_TOKEN not set"
 ```
 
 If both options fail: set `JIRA_FETCH_FAILED` with a short reason and proceed. Do not stop.
 
 If the ticket is fetched: store the data as `JIRA_CONTEXT` and note the ticket key.
 
-## Step 2: Get the diff
+## Step 3: Get the diff
 
-Get the full diff:
 ```bash
 gh pr diff <pr-number>
-```
-
-Get the list of changed files:
-```bash
 gh pr diff <pr-number> --name-only
 ```
 
-## Step 3: Deep codebase analysis
+Read changed files at the PR head, not at a stale local commit.
+If `git rev-parse HEAD` equals `headRefOid` and `git status --porcelain` prints nothing, read the working tree.
+Uncommitted local edits are not part of the PR, so never review them.
+Otherwise fetch the PR head and read files with `git show <headRefOid>:<path>`:
+```bash
+git fetch origin "pull/<pr-number>/head" --quiet
+```
+
+If the diff is empty, tell the user there is nothing to review and stop.
+
+## Step 4: Fetch comments from other reviewers
+
+Fetch every kind of PR comment:
+
+```bash
+REPO=$(gh repo view --json nameWithOwner -q .nameWithOwner)
+
+# Inline review comments (on code lines), including replies
+gh api "repos/$REPO/pulls/<pr-number>/comments" --paginate \
+  --jq '.[] | {id, in_reply_to_id, user: .user.login, path, line, original_line, body, created_at}'
+
+# Review summaries (the text submitted with Approve / Comment / Request changes)
+gh api "repos/$REPO/pulls/<pr-number>/reviews" --paginate \
+  --jq '.[] | select(.body != "") | {user: .user.login, state, body, submitted_at}'
+
+# General conversation comments
+gh api "repos/$REPO/issues/<pr-number>/comments" --paginate \
+  --jq '.[] | {user: .user.login, body, created_at}'
+```
+
+How to treat them:
+- Group inline comments into threads with `in_reply_to_id`, and read each thread in full.
+- Copilot shows up as `Copilot` or `copilot-pull-request-reviewer[bot]`. Name it **Copilot**.
+- Ignore purely automated bot output with no review content (CI status, coverage reports, deploy previews, changelog or release bots). Keep code-review bots.
+- Comments by the PR author are not issues. Use them as context only (for example "fixed in abc123" or "won't fix, because ...").
+- Ignore praise, thanks, and questions that do not point at a problem.
+- **Do not trust the "resolved" status of a thread or the author's reply.** Only the current code decides whether an issue is fixed.
+- A comment with `line: null` is outdated: the code it pointed at has changed. Find where that code went in the current version before judging.
+- Store the result as `OTHER_REVIEWS`: a list of raised issues, each with the reviewer, file and line, and the point being made.
+  If there are none, note that the PR has no review comments yet.
+
+## Step 5: Deep codebase analysis
 
 For every changed file:
 
@@ -181,45 +225,60 @@ For every changed file:
 
 Read broadly - more codebase context gives a better review.
 
-## Step 4: Produce the review
+Then check every issue in `OTHER_REVIEWS` against the **current** code at the PR head:
 
-Structure your review as follows:
+1. **Is the point valid?** Judge it yourself, as harshly as your own findings: `Valid`, `Partly valid`, or `Not valid`.
+2. **What is the state of the code now?** `Not fixed`, `Fixed wrongly` (the change does not solve it, solves it only in part, or adds a new problem), or `Fixed`.
+3. Decide whether it goes into the review:
 
-### PR Summary
-One paragraph summarizing what this PR does and why (based on the diff and PR description).
+| Valid? | Code now | Include in "Issues reviewed by others"? |
+|---|---|---|
+| Valid / Partly valid | Not fixed | Yes |
+| Valid / Partly valid | Fixed wrongly | Yes, say what is still wrong |
+| Valid / Partly valid | Fixed | No |
+| Not valid | Not changed | Yes, say why it is not valid |
+| Not valid | Changed to follow it | Yes, say why you disagree and whether the change should be reverted |
 
-### Additional Review Context
-Summarize the extra context provided after the selector and explain how it affected the review priorities. If none was provided, say so.
+## Step 6: Write the review
 
-### Verdict
-One of:
-- **REJECT** - has critical issues that must be fixed before merge
-- **CHANGES REQUESTED** - solid direction but has issues that need addressing
-- **APPROVE WITH NITS** - good to merge, minor suggestions below
-- **APPROVE** - ship it (rare - earn this)
+Use exactly this structure.
+Do **not** give a verdict (no approve, reject, or "changes requested").
 
-### Critical Issues
-Issues that must be fixed. These block the PR. Each issue should reference the specific file and line(s).
+```markdown
+## Review: PR #123 "title"
+**Target:** `<source>` → `<target>`
+**Context:** <additional context and how it shaped the review, or "none">
+**Jira:** <KEY - summary, or "none">
 
-Example: `src/auth.ts:42` - token expiry is checked with `<` instead of `<=`, so a token is accepted for one extra second after it expires. Use `<=`.
+<One short paragraph: what the change does and why.>
 
-If `JIRA_CONTEXT` is available and the ticket has substantive content (non-empty description or AC): include any ticket-based findings here that qualify as critical — i.e. a requirement clearly stated in the ticket that is completely absent from the PR. Tag each such finding with `[Jira: KEY]`.
+### Issues reviewed by skill
+1. (<Critical|Major|Minor>) `path/file.ts:42` - <problem>. <fix>.
 
-### Major Concerns
-Significant problems that strongly should be addressed - design issues, potential bugs, performance problems, security concerns.
+### Issues reviewed by others
+1. **@reviewer** (<Critical|Major|Minor>) `path/file.ts:42` - <the point they made, in one line>
+   - **Valid:** <Yes | Partly | No> - <why>
+   - **Status:** <Not fixed | Fixed wrongly | Fixed, but should not have been> - <what the code does now>
+```
 
-If `JIRA_CONTEXT` is available: include ticket-based findings that qualify as major — i.e. the PR partially implements or contradicts what the ticket specifies. Tag each with `[Jira: KEY]`.
+Severity, shown in brackets before each issue:
+- **Critical** - must be fixed before merge: bugs, data loss, security holes, broken behavior.
+  If `JIRA_CONTEXT` has substantive content (non-empty description or AC), a requirement clearly stated in the ticket and completely absent from the change is Critical, tagged `[Jira: KEY]`.
+- **Major** - should be fixed: design problems, likely bugs, performance problems, missing tests for risky code, convention violations that will spread, reinvented utilities.
+  Ticket findings where the change partly implements or contradicts the ticket are Major, tagged `[Jira: KEY]`.
+- **Minor** - style, naming, readability, small improvements, nits.
+  Ticket findings where the ticket is vague but worth flagging are Minor, tagged `[Jira: KEY]`, as are big changes clearly out of the ticket's scope.
 
-### Minor Issues & Nits
-Style inconsistencies, naming suggestions, minor improvements, readability tweaks.
-
-If `JIRA_CONTEXT` is available: include ticket-based findings that qualify as minor — small deviations where the ticket is vague and the PR may be fine but is worth flagging. Tag each with `[Jira: KEY]`. Also note here if the PR contains significant changes clearly out of scope of the ticket.
-
-### Codebase Consistency
-Specific observations about whether the PR follows established patterns in the codebase. Call out:
-- Existing utilities or helpers that should be reused
-- Convention violations (naming, file structure, patterns)
-- Inconsistencies with how similar features are implemented elsewhere
+List rules:
+- Both lists are single flat numbered lists, with no sub-headings per severity.
+  Sort each one by severity: all Critical first, then Major, then Minor.
+- **Issues reviewed by skill** - your own findings, including codebase consistency findings (existing helpers to reuse, convention breaks).
+- **Issues reviewed by others** - the issues kept by the table in Step 5. The severity in brackets is your own judgment, not the reviewer's.
+  Use the reviewer's GitHub login, or **Copilot**.
+  If several reviewers raised the same issue, list it once and name all of them.
+- An issue already raised by others goes **only** into "Issues reviewed by others", never also into "Issues reviewed by skill".
+- Both lists are always shown. If a list has nothing, write `None.` under it.
+  If the PR has no review comments, write `None - no review comments yet.` under "Issues reviewed by others".
 
 ---
 
@@ -287,20 +346,23 @@ Do not produce long essays - be concise and to the point. The goal is to provide
 Never ignore additional review context. Either:
 
 - incorporate it into the review, or
-- explicitly explain why it should not change the review outcome.
+- explicitly explain why it should not change the review.
 
 If `JIRA_FETCH_FAILED` is set, append this note at the very end of the review (after all sections):
 
-> **Note:** Jira ticket `[KEY]` was referenced in the PR description but could not be fetched (`[reason]`). Ticket alignment was not checked.
+> **Note:** Jira ticket `[KEY]` was referenced but could not be fetched (`[reason]`). Ticket alignment was not checked.
 
 ## Final check
 
 Before sending the review, verify:
-1. Every issue names a file path and line numbers.
-2. The verdict is one of the four allowed values, and is not APPROVE or APPROVE WITH NITS when Critical Issues exist.
-3. Additional review context is incorporated or explicitly explained away.
-4. Ticket-based findings are tagged `[Jira: KEY]`.
-5. No vague observations and no long essays.
+1. There is no verdict anywhere (no approve, reject, or "changes requested").
+2. Both lists are present: Issues reviewed by skill, Issues reviewed by others. Each empty one says `None.` (or the `None - ...` text for reviewer comments).
+3. Every issue has a severity in brackets and names a file path and line numbers, and each list is sorted Critical, then Major, then Minor, with no severity sub-headings.
+4. Every item in "Issues reviewed by others" names who raised it, a Valid line, and a Status line, and its state was checked against the current code, not the thread's resolved status.
+5. No valid issue that is correctly fixed is listed, and no issue appears in both lists.
+6. Additional review context is incorporated or explicitly explained away.
+7. Ticket-based findings are tagged `[Jira: KEY]`.
+8. No vague observations and no long essays.
 
 If any check fails, note which one, fix the review, and re-run the checks.
 Send the review only when all pass.
