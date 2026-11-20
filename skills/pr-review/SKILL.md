@@ -1,6 +1,6 @@
 ---
 name: pr-review
-description: Does a deep, harsh code review of a github pull request (by number, branch name, or HEAD) or of the current branch when no selector is given, and checks comments left by other reviewers and Copilot against the current code. Lists issues sorted by severity (critical, major, minor). Use when the user asks to review, critique, or check a PR, a branch, or their current changes before merge.
+description: Does a deep, harsh code review of a github pull request (by number, branch name, or HEAD), or of the current branch's PR when no selector is given, and checks comments left by other reviewers and Copilot against the current code. Stops if the branch has no open PR. Lists issues sorted by severity (critical, major, minor). Use when the user asks to review, critique, or check a PR, or the PR of a branch, before merge.
 ---
 
 You are a senior staff engineer performing a ruthless, in-depth code review. You know this codebase inside and out.
@@ -12,7 +12,7 @@ For Jira context, either the Atlassian MCP connected, or `curl` with `JIRA_ORG` 
 ## Contents
 - Progress checklist
 - Input handling
-- Step 1: Resolve the review target
+- Step 1: Resolve the PR
 - Step 2: Jira ticket context
 - Step 3: Get the diff
 - Step 4: Fetch comments from other reviewers
@@ -28,10 +28,10 @@ Copy this into your reply and tick items as you go:
 
 ```
 Review progress:
-- [ ] 1. Resolve the review target (PR or branch)
+- [ ] 1. Resolve the PR (stop if there is none)
 - [ ] 2. Fetch Jira context, if a ticket is mentioned
 - [ ] 3. Get the diff
-- [ ] 4. Fetch comments from other reviewers (PR mode only)
+- [ ] 4. Fetch comments from other reviewers
 - [ ] 5. Analyze changed files, the codebase, and every issue raised by others
 - [ ] 6. Write the review
 - [ ] 7. Run the final check. If any check fails, go back to step 6
@@ -46,17 +46,17 @@ The raw user input is available as:
 The selector is optional.
 Decide what the first whitespace-delimited token (`T`) is:
 
-- `$ARGUMENTS` is empty: review the **current branch**, with no additional context.
+- `$ARGUMENTS` is empty: review the PR of the **current branch**, with no additional context.
 - `T` is digits, `#` plus digits, or a GitHub PR URL (`.../pull/<n>`): it is a **PR number**. The rest is additional context.
-- `T` is `HEAD` (case-insensitive): review the **current branch**. The rest is additional context.
-- `T` is an existing branch name: it is a **branch**. The rest is additional context. Check with:
+- `T` is `HEAD` (case-insensitive): review the PR of the **current branch**. The rest is additional context.
+- `T` is an existing branch name: review the PR of that **branch**. The rest is additional context. Check with:
   ```bash
   git show-ref --verify --quiet "refs/heads/$T" \
     || git show-ref --verify --quiet "refs/remotes/origin/$T" \
     || git ls-remote --exit-code --heads origin "$T" >/dev/null
   ```
-- Anything else: review the **current branch**, and the **whole** `$ARGUMENTS` is additional context.
-  For example, `/pr-review focus on performance` reviews the current branch with "focus on performance" as context.
+- Anything else: review the PR of the **current branch**, and the **whole** `$ARGUMENTS` is additional context.
+  For example, `/pr-review focus on performance` reviews the current branch's PR with "focus on performance" as context.
 
 Additional context:
 - May contain spaces, bullets, punctuation, and multiple lines.
@@ -68,7 +68,7 @@ Before proceeding, present a short input summary:
 - review target (PR number, branch name, or "current branch `<name>`")
 - additional review context, if any
 
-## Step 1: Resolve the review target
+## Step 1: Resolve the PR
 
 For the current branch, get its name first:
 
@@ -78,7 +78,7 @@ BRANCH=$(git rev-parse --abbrev-ref HEAD)
 
 If `BRANCH` is `HEAD` (detached HEAD) and no PR number was given, stop and tell the user to check out a branch or pass a PR number.
 
-Look for a PR:
+Look for the PR:
 
 ```bash
 # PR number:
@@ -88,29 +88,19 @@ gh pr view "<number>" --json number,title,body,author,baseRefName,headRefName,he
 gh pr list --head "<branch>" --json number,title,body,author,baseRefName,headRefName,headRefOid,files,additions,deletions,changedFiles,url --limit 1
 ```
 
-If a PR number was given and no PR is found, tell the user and stop.
+**If no PR is found, stop right away.**
+Do not fall back to a branch diff, and do not run any later step.
+Tell the user in one line, then end the reply:
+- PR number given: "No PR #<number> found in this repo - nothing to review."
+- Branch or current branch: "No open PR for branch `<branch>` - nothing to review. Open a PR first, or pass a PR number."
 
-**PR mode** (a PR was found): note the PR number, title, author, source branch (`headRefName`), target branch (`baseRefName`), head commit (`headRefOid`), and description.
-
-**Branch mode** (a branch or the current branch has no open PR): do not stop.
-Review the branch against the repo's default branch instead:
-
-```bash
-BASE=$(gh repo view --json defaultBranchRef -q .defaultBranchRef.name 2>/dev/null \
-  || git symbolic-ref --short refs/remotes/origin/HEAD | sed 's@^origin/@@')
-git fetch origin "$BASE" --quiet
-```
-
-If the branch is `BASE` itself, stop and tell the user there is nothing to compare: pass a PR number or a feature branch.
-Tell the user that no PR was found, so the review covers the branch diff against `origin/<BASE>` and there are no reviewer comments to check.
+When the PR is found, note its number, title, author, source branch (`headRefName`), target branch (`baseRefName`), head commit (`headRefOid`), and description.
 
 Present a short summary of the target before proceeding.
 
 ## Step 2: Jira ticket context (automatic)
 
-Scan these for Jira ticket references:
-- PR mode: PR title, PR description, source branch name.
-- Branch mode: branch name and commit messages (`git log "origin/$BASE..<branch>" --format=%B`).
+Scan the PR title, PR description, and source branch name for Jira ticket references.
 
 References look like:
 - Bare ticket key: pattern `[A-Z]+-[0-9]+` (e.g. `PROJ-123`)
@@ -168,7 +158,6 @@ If the ticket is fetched: store the data as `JIRA_CONTEXT` and note the ticket k
 
 ## Step 3: Get the diff
 
-**PR mode:**
 ```bash
 gh pr diff <pr-number>
 gh pr diff <pr-number> --name-only
@@ -181,26 +170,9 @@ Otherwise fetch the PR head and read files with `git show <headRefOid>:<path>`:
 git fetch origin "pull/<pr-number>/head" --quiet
 ```
 
-**Branch mode, current branch** (includes uncommitted changes):
-```bash
-MB=$(git merge-base "origin/$BASE" HEAD)
-git diff "$MB"
-git diff "$MB" --name-only
-git ls-files --others --exclude-standard   # untracked files, read them too
-```
-
-**Branch mode, another branch:**
-```bash
-git fetch origin "<branch>" --quiet
-git diff "origin/$BASE...origin/<branch>"
-git diff "origin/$BASE...origin/<branch>" --name-only
-```
-
 If the diff is empty, tell the user there is nothing to review and stop.
 
-## Step 4: Fetch comments from other reviewers (PR mode only)
-
-Skip this step in branch mode.
+## Step 4: Fetch comments from other reviewers
 
 Fetch every kind of PR comment:
 
@@ -266,7 +238,7 @@ Use exactly this structure.
 Do **not** give a verdict (no approve, reject, or "changes requested").
 
 ```markdown
-## Review: <PR #123 "title"> | <branch `name` (no PR)>
+## Review: PR #123 "title"
 **Target:** `<source>` → `<target>`
 **Context:** <additional context and how it shaped the review, or "none">
 **Jira:** <KEY - summary, or "none">
@@ -299,8 +271,7 @@ List rules:
   If several reviewers raised the same issue, list it once and name all of them.
 - An issue already raised by others goes **only** into "Issues reviewed by others", never also into "Issues reviewed by skill".
 - Both lists are always shown. If a list has nothing, write `None.` under it.
-  In branch mode, write `None - no PR, so no review comments to check.` under "Issues reviewed by others".
-  In PR mode with no review comments, write `None - no review comments yet.`
+  If the PR has no review comments, write `None - no review comments yet.` under "Issues reviewed by others".
 
 ---
 

@@ -1,5 +1,5 @@
 # pr-review
-Senior-engineer-grade code review of a GitHub Pull Request or of your current branch.
+Senior-engineer-grade code review of a GitHub Pull Request, picked by number, branch, or your current branch.
 
 ## Why use it
 GitHub's own review UI is fine for spotting typos. 
@@ -7,7 +7,8 @@ It doesn't catch the kinds of issues a staff engineer would: subtle correctness 
 This skill reads the PR, reads the surrounding codebase, and gives you the kind of review that hurts a little - on purpose.
 It also checks what other reviewers (people and Copilot) already said, and tells you which of their points still stand.
 
-Use it before you hit "Approve", or use it on your own branch before opening a PR.
+Use it before you hit "Approve", or on your own PR before asking for reviews.
+The branch must have an open PR - without one, the skill stops.
 
 ## Quick example
 ```text
@@ -60,7 +61,7 @@ Basic shape:
 ```
 
 The selector is optional.
-If the first word is not a PR number, `HEAD`, or an existing branch, the skill reviews your current branch and treats everything you typed as extra context.
+If the first word is not a PR number, `HEAD`, or an existing branch, the skill reviews your current branch's PR and treats everything you typed as extra context.
 
 Examples:
 ```text
@@ -81,18 +82,21 @@ ignore cosmetic naming nits unless they affect clarity
 ```
 
 Notes on the input:
-- **Nothing** - reviews the current branch.
+- **Nothing** - reviews the PR of the current branch.
 - **PR number** - any PR in the repo (`1234`, `#1234`, or the PR URL).
 - **Branch name** - a branch that exists locally or on `origin` (`feat/add-new-api`); the skill finds its PR.
-- **`HEAD`** - same as nothing: the current branch.
-- **No PR for the branch** - the skill does not stop. It reviews the branch against the repo's default branch instead (for the current branch, uncommitted and untracked files are included). There are no reviewer comments to check in this case.
+- **`HEAD`** - same as nothing: the PR of the current branch.
+- **No PR for the branch** - the skill stops right away and tells you there is no open PR for that branch.
+Nothing is reviewed.
+Open a PR first, or pass a PR number.
 
 ## What happens when you run it
-1. The skill resolves your input to a PR, or to a branch when there is no PR, and fetches the metadata and the full diff.
-2. If the PR title, description, branch name, or (without a PR) commit messages contain a Jira ticket key (`PROJ-123`) or a Jira browse URL, the skill fetches that ticket and uses it to check the change does what was asked.
+1. The skill resolves your input to a PR and fetches the metadata and the full diff.
+If there is no PR, it stops here.
+2. If the PR title, description, or branch name contain a Jira ticket key (`PROJ-123`) or a Jira browse URL, the skill fetches that ticket and uses it to check the change does what was asked.
 Fetch uses the Atlassian MCP integration if connected, otherwise falls back to `curl` with `JIRA_ORG`/`JIRA_EMAIL`/`JIRA_API_TOKEN`.
 If the ticket cannot be fetched, the review still goes on and a note is added at the end.
-3. For a PR, it fetches all comments: inline code comments with their replies, review summaries, and general conversation comments, from people and from Copilot.
+3. It fetches all PR comments: inline code comments with their replies, review summaries, and general conversation comments, from people and from Copilot.
 4. It reads every changed file in full at the PR head - not just the diff hunks - so context around the changes is real.
 5. It explores the broader codebase for related patterns, utilities, and conventions, so the review can flag things like "this duplicates a function that already exists at X".
 6. It checks every issue raised by other reviewers against the current code.
