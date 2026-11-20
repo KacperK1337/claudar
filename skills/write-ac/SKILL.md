@@ -69,13 +69,14 @@ Extract the ticket key from the URL, or use it directly.
 
 **Option 1 — Atlassian MCP (preferred when connected):**
 
-If the `Atlassian:getJiraIssue` tool is available to you, call it directly with the ticket key.
+If the `Atlassian:getJiraIssue` tool is available to you, use it with the ticket key.
+It needs a `cloudId`: call `Atlassian:getAccessibleAtlassianResources` once and use the returned id.
 No environment variables are needed.
-Extract: ticket key, summary, description, any existing acceptance criteria, issue type.
 
 **Option 2 — curl fallback (when MCP is not connected):**
 
-Resolve the Jira base URL from `JIRA_ORG`:
+The snippet uses Basic auth when `JIRA_EMAIL` and `JIRA_API_TOKEN` are set, since Jira Cloud often answers a call without auth with 404 for a private ticket instead of 401/403.
+Replace `<TICKET_KEY>` with the real key before running it:
 
 ```bash
 if [ -z "$JIRA_ORG" ]; then
@@ -83,28 +84,18 @@ if [ -z "$JIRA_ORG" ]; then
   echo "  export JIRA_ORG=your-org"
   exit 1
 fi
-JIRA_URL="https://${JIRA_ORG}.atlassian.net"
-```
-
-Fetch the ticket:
-
-```bash
-curl -s -w "\n%{http_code}" "${JIRA_URL}/rest/api/2/issue/${TICKET_KEY}?fields=summary,description,issuetype,priority,labels,components,acceptance" \
-  -H "Accept: application/json"
+URL="https://${JIRA_ORG}.atlassian.net/rest/api/2/issue/<TICKET_KEY>?fields=summary,description,issuetype,priority,labels,components"
+if [ -n "$JIRA_EMAIL" ] && [ -n "$JIRA_API_TOKEN" ]; then
+  echo "AUTH=yes"
+  curl -s -w "\n%{http_code}" "$URL" -H "Accept: application/json" -u "${JIRA_EMAIL}:${JIRA_API_TOKEN}"
+else
+  echo "AUTH=no"
+  curl -s -w "\n%{http_code}" "$URL" -H "Accept: application/json"
+fi
 ```
 
 The last line of the output is the HTTP status code, the rest is the response body.
-If the status code is 401 or 403, retry with Basic auth:
-
-```bash
-curl -s -w "\n%{http_code}" "${JIRA_URL}/rest/api/2/issue/${TICKET_KEY}?fields=summary,description,issuetype,priority,labels,components,acceptance" \
-  -H "Accept: application/json" \
-  -u "${JIRA_EMAIL}:${JIRA_API_TOKEN}"
-```
-
-Any other non-2xx status is a fetch failure: stop and report it (see Rules).
-
-If authentication is required but `JIRA_EMAIL` or `JIRA_API_TOKEN` are not set, stop immediately and tell the user:
+If the status code is 401, 403, or 404 with `AUTH=no`, stop immediately and tell the user:
 
 > Authentication required. Please export your credentials:
 > ```bash
@@ -113,7 +104,16 @@ If authentication is required but `JIRA_EMAIL` or `JIRA_API_TOKEN` are not set, 
 > ```
 > Alternatively, connect the Atlassian MCP integration — no env vars needed.
 
+If the status code is 401 or 403 with `AUTH=yes`, stop and tell the user Jira rejected `JIRA_EMAIL`/`JIRA_API_TOKEN`.
+If it is 404 with `AUTH=yes`, stop and tell the user the ticket was not found, or they have no access to its project.
+Any other non-2xx status is a fetch failure: stop and report it (see Rules).
+
+**Both options:**
+
 Extract: ticket key, summary, description, any existing acceptance criteria, issue type.
+Acceptance criteria (AC) exist only in the description, and may not be labeled.
+Look for a section headed "AC", "Acceptance criteria", or similar, or a list of conditions with no heading, such as "should ...", "must ...", or given/when/then lines.
+If the description has no clear AC, use only the description as context.
 
 ### Case C: GitHub PR URL
 
@@ -155,12 +155,12 @@ Extract the page title and body text.
 
 **Option 2 — curl fallback (when MCP is not connected):**
 
-Resolve `JIRA_ORG` and build `JIRA_URL` exactly as in Case B, Option 2.
+Check `JIRA_ORG` exactly as in Case B, Option 2.
 
 Fetch the Confluence page:
 
 ```bash
-curl -s -w "\n%{http_code}" "${JIRA_URL}/wiki/rest/api/content/${PAGE_ID}?expand=body.storage,title" \
+curl -s -w "\n%{http_code}" "https://${JIRA_ORG}.atlassian.net/wiki/rest/api/content/${PAGE_ID}?expand=body.storage,title" \
   -H "Accept: application/json" \
   -u "${JIRA_EMAIL}:${JIRA_API_TOKEN}"
 ```
