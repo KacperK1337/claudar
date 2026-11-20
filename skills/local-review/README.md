@@ -92,5 +92,7 @@ Ticket-based findings are tagged `[Jira: KEY]`.
 9. Before sending, it checks the review (no verdict, no GitHub calls, list sorted by severity, file and line references, uncommitted files covered, extra context handled, Jira tags) and fixes it if a check fails.
 
 ## Notes
-- The review is harsh by design. It simulates a senior staff engineer who knows the codebase and refuses to wave anything through.
-- Nothing in the repo is modified. The skill may run `git fetch` to get the latest default branch.
+- The review is harsh by design.
+It simulates a senior staff engineer who knows the codebase and refuses to wave anything through.
+- Nothing in the repo is modified.
+The skill may run `git fetch` to get the latest default branch.

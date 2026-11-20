@@ -3,7 +3,8 @@ name: local-review
 description: Does a deep, harsh code review of a local git branch (by name, or the current branch for HEAD or no selector) against the repo's default branch, before any pull request exists. Covers committed, uncommitted, and untracked changes on the current branch. Uses only git, never GitHub. Lists issues sorted by severity (critical, major, minor). Use when the user asks to review, critique, or check their branch or local changes before opening a PR.
 ---
 
-You are a senior staff engineer performing a ruthless, in-depth code review. You know this codebase inside and out.
+You are a senior staff engineer performing a ruthless, in-depth code review.
+You know this codebase inside and out.
 Your job is to protect its quality, consistency, and maintainability.
 
 Requires `git`.
@@ -48,7 +49,9 @@ Decide what the first whitespace-delimited token (`T`) is:
 
 - `$ARGUMENTS` is empty: review the **current branch**, with no additional context.
 - `T` is `HEAD` (case-insensitive): review the **current branch**. The rest is additional context.
-- `T` is an existing branch name: review that **branch**. The rest is additional context. Check with:
+- `T` is an existing branch name: review that **branch**.
+  The rest is additional context.
+  Check with:
   ```bash
   git show-ref --verify --quiet "refs/heads/$T" \
     || git show-ref --verify --quiet "refs/remotes/origin/$T"
@@ -119,7 +122,7 @@ Present a short summary of the target before proceeding: branch, `REF`, `origin/
 
 ## Step 2: Jira ticket context (automatic)
 
-Scan the branch name and its commit messages for Jira ticket references:
+Scan the branch name (from Step 1) and the commit messages for Jira ticket references:
 
 ```bash
 git log "origin/$BASE..$REF" --format=%B
@@ -129,55 +132,60 @@ References look like:
 - Bare ticket key: pattern `[A-Z]+-[0-9]+` (e.g. `PROJ-123`)
 - Jira browse URL: pattern `*.atlassian.net/browse/*`
 
+Ignore matches that are clearly not tickets, such as `UTF-8`, `SHA-256`, or `ISO-8601`.
+
 If no reference is found, skip this step entirely and proceed to Step 3.
 
 If a reference is found, extract the ticket key and attempt to fetch the ticket.
 **This step must never block the review.**
 If fetching fails for any reason, record the failure reason as `JIRA_FETCH_FAILED` and proceed to Step 3.
+If Jira says the key does not exist (MCP "not found", or HTTP 404 on a call with auth), treat it as not a ticket: skip the rest of this step and do not set `JIRA_FETCH_FAILED`.
 
 **Option 1 — Atlassian MCP (preferred when connected):**
 
-If the `Atlassian:getJiraIssue` tool is available, call it directly with the ticket key.
+If the `Atlassian:getJiraIssue` tool is available, use it with the ticket key.
+It needs a `cloudId`: call `Atlassian:getAccessibleAtlassianResources` once and use the returned id.
 No environment variables are needed.
-Extract: key, summary, description, any acceptance criteria, issue type.
+Extract: key, summary, description, issue type.
 
 **Option 2 — curl fallback (when MCP is not connected or fails):**
 
-Resolve the Jira base URL from `JIRA_ORG`:
-
-```bash
-if [ -z "$JIRA_ORG" ]; then
-  JIRA_FETCH_FAILED="JIRA_ORG env var not set — cannot construct Jira URL"
-  echo "JIRA_FETCH_FAILED=$JIRA_FETCH_FAILED"
-else
-  JIRA_URL="https://${JIRA_ORG}.atlassian.net"
-  echo "JIRA_URL=$JIRA_URL"
-fi
-```
+The snippet below is self-contained: replace `<TICKET_KEY>` with the real key before running it.
+It uses Basic auth when `JIRA_EMAIL` and `JIRA_API_TOKEN` are set, since Jira Cloud often answers a call without auth with 404 for a private ticket instead of 401/403.
 
 Fetch the ticket:
 
 ```bash
-curl -s -w "\n%{http_code}" "${JIRA_URL}/rest/api/2/issue/${TICKET_KEY}?fields=summary,description,issuetype,priority,labels,components,acceptance" \
-  -H "Accept: application/json"
+URL="https://${JIRA_ORG}.atlassian.net/rest/api/2/issue/<TICKET_KEY>?fields=summary,description,issuetype,priority,labels,components"
+if [ -z "$JIRA_ORG" ]; then
+  echo "JIRA_FETCH_FAILED=JIRA_ORG env var not set - cannot construct Jira URL"
+elif [ -n "$JIRA_EMAIL" ] && [ -n "$JIRA_API_TOKEN" ]; then
+  echo "AUTH=yes"
+  curl -s -w "\n%{http_code}" "$URL" -H "Accept: application/json" -u "${JIRA_EMAIL}:${JIRA_API_TOKEN}"
+else
+  echo "AUTH=no"
+  curl -s -w "\n%{http_code}" "$URL" -H "Accept: application/json"
+fi
 ```
 
 The last line of the output is the HTTP status code, the rest is the response body.
-If the status code is 401 or 403, retry with Basic auth:
+Read the result by status code:
+- 200: the ticket is fetched.
+- 404 with `AUTH=yes`: the key does not exist, so it is not a ticket (see above).
+- 404 with `AUTH=no`: `JIRA_FETCH_FAILED=not found or no access - JIRA_EMAIL/JIRA_API_TOKEN not set`.
+- 401 or 403 with `AUTH=no`: `JIRA_FETCH_FAILED=auth required but JIRA_EMAIL/JIRA_API_TOKEN not set`.
+- 401 or 403 with `AUTH=yes`: `JIRA_FETCH_FAILED=Jira rejected JIRA_EMAIL/JIRA_API_TOKEN`.
+- Anything else: `JIRA_FETCH_FAILED=HTTP <code>`.
 
-```bash
-curl -s -w "\n%{http_code}" "${JIRA_URL}/rest/api/2/issue/${TICKET_KEY}?fields=summary,description,issuetype,priority,labels,components,acceptance" \
-  -H "Accept: application/json" \
-  -u "${JIRA_EMAIL}:${JIRA_API_TOKEN}"
-```
+**Finding the acceptance criteria (both options):**
 
-If authentication is still required but credentials are missing, set:
+Acceptance criteria (AC) exist only in the description, and may not be labeled.
+Look for a section headed "AC", "Acceptance criteria", or similar, or a list of conditions with no heading, such as "should ...", "must ...", or given/when/then lines.
+If the description has no clear AC, work out the requirements from the description itself.
 
-```
-JIRA_FETCH_FAILED="auth required but JIRA_EMAIL/JIRA_API_TOKEN not set"
-```
-
-If both options fail: set `JIRA_FETCH_FAILED` with a short reason and proceed. Do not stop.
+If a snippet prints `JIRA_FETCH_FAILED=<reason>`, record that reason.
+If both options fail: set `JIRA_FETCH_FAILED` with a short reason and proceed.
+Do not stop.
 
 If the ticket is fetched: store the data as `JIRA_CONTEXT` and note the ticket key.
 
@@ -231,7 +239,7 @@ Do **not** give a verdict (no approve, reject, or "ready to merge").
 
 ```markdown
 ## Review: branch `<name>`
-**Target:** `<branch>` → `origin/<BASE>` (<N commits ahead>, <"includes uncommitted changes" | "committed changes only">)
+**Target:** `<branch>` → `origin/<BASE>` (<N commits ahead>, <"includes uncommitted changes" | "committed changes only">[, base may be stale - only if the fetch failed])
 **Context:** <additional context and how it shaped the review, or "none">
 **Jira:** <KEY - summary, or "none">
 
